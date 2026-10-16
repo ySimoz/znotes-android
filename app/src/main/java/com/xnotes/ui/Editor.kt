@@ -591,8 +591,13 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     var treeVersion by mutableStateOf(0)
         private set
 
+    /** Notify the home explorer and folder tree that the granted document tree changed. */
+    fun refreshBrowseTree() { treeVersion++ }
+
     /** Bumped on every preferences change so open panes refresh (e.g. after an .scm import). */
     var prefsVersion by mutableStateOf(0)
+        private set
+    var appLanguage by mutableStateOf(settings.prefs.appLanguage)
         private set
     var editingField by mutableStateOf<EditingField?>(null)
         private set
@@ -2333,7 +2338,26 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     /** Apply edited preferences live and persist (used by the Preferences dialog). */
     fun applyPreferences(p: Preferences) {
         val marginChanged = p.sideMargin != settings.prefs.sideMargin
+        val langChanged = p.appLanguage != settings.prefs.appLanguage
         settings = settings.copy(prefs = p)
+        if (langChanged) {
+            appLanguage = p.appLanguage
+            val targetLocale = if (p.appLanguage == "system") {
+                android.content.res.Resources.getSystem().configuration.locales.get(0) ?: java.util.Locale.getDefault()
+            } else {
+                java.util.Locale.forLanguageTag(p.appLanguage)
+            }
+            java.util.Locale.setDefault(targetLocale)
+            val conf = android.content.res.Configuration(appContext.resources.configuration)
+            if (p.appLanguage == "system") {
+                conf.setLocales(android.content.res.Resources.getSystem().configuration.locales)
+            } else {
+                conf.setLocales(android.os.LocaleList(targetLocale))
+            }
+            conf.setLayoutDirection(targetLocale)
+            @Suppress("DEPRECATION")
+            appContext.resources.updateConfiguration(conf, appContext.resources.displayMetrics)
+        }
         for (editor in listOfNotNull(this, sibling)) {
             editor.fullscreen = p.startFullscreen ?: !editor.deviceHasDisplayCutout
             editor.applyPagePrefsToState(p)
@@ -3528,6 +3552,14 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         updateBrowseRoot(com.xnotes.platform.AppStorageDocumentsProvider.treeUri(appContext).toString())
     }
 
+    /** Whether [treeUri] points to the app's internal notes storage rather than an external SAF grant. */
+    fun isInternalStorage(treeUri: String?): Boolean {
+        if (treeUri == null) return false
+        return runCatching {
+            android.net.Uri.parse(treeUri).authority == "${appContext.packageName}.documents"
+        }.getOrDefault(false)
+    }
+
     /** The pins under the current explorer root; the rest wait for their folder to be the root again. */
     val sidebarPins: List<com.xnotes.settings.PinnedFolder>
         get() = browseRoot?.let { root -> pinnedFolders.filter { isUnderTree(it.uri, root) } }.orEmpty()
@@ -3718,9 +3750,9 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     /** Creates a subfolder [name] under [parentDocId] in tree [treeUri]; IO, call off-thread. */
     fun createFolder(treeUri: String, parentDocId: String, name: String): Boolean = runCatching {
         val parent = android.provider.DocumentsContract.buildDocumentUriUsingTree(android.net.Uri.parse(treeUri), parentDocId)
-        android.provider.DocumentsContract.createDocument(
+        (android.provider.DocumentsContract.createDocument(
             appContext.contentResolver, parent, android.provider.DocumentsContract.Document.MIME_TYPE_DIR, name,
-        ) != null
+        ) != null).also { if (it) refreshBrowseTree() }
     }.getOrDefault(false)
 
     /**
@@ -3780,6 +3812,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         }.getOrNull() ?: return null
         return runCatching {
             appContext.contentResolver.openOutputStream(uri, "wt")?.use { write(it) }
+            refreshBrowseTree()
             uri.toString()
         }.getOrElse {
             runCatching { android.provider.DocumentsContract.deleteDocument(appContext.contentResolver, uri) }
@@ -3954,6 +3987,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             title = state.document.title
         }
         onDocumentMoved(docUri, resultUri, newName)
+        refreshBrowseTree()
         return true
     }
 
@@ -4022,7 +4056,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     /** Deletes a document (file or folder), then erases every trace of it. IO, call off-thread. */
     fun deleteDocument(docUri: String): Boolean = runCatching {
         val ok = android.provider.DocumentsContract.deleteDocument(appContext.contentResolver, android.net.Uri.parse(docUri))
-        if (ok) purgeDeleted(docUri)
+        if (ok) { purgeDeleted(docUri); refreshBrowseTree() }
         ok
     }.getOrDefault(false)
 
@@ -4233,7 +4267,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             state.document.path = newUri.toString()
             if (autosaveUri == sourceUri) autosaveUri = newUri.toString()
         }
-        newUri?.let { onDocumentMoved(sourceUri, it.toString()) }
+        newUri?.let { onDocumentMoved(sourceUri, it.toString()); refreshBrowseTree() }
         newUri != null
     }.getOrDefault(false)
 
@@ -5178,6 +5212,8 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         }
         for ((parent, changes) in cleared) setItemColors(treeUri, parent, changes)
         refreshTrashCount(treeUri)
+        // Keep the sidebar's recursive tree in sync with deletions initiated from the explorer.
+        refreshBrowseTree()
         return trashed to failed
     }
 
@@ -5326,6 +5362,11 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
                     browseRoot?.let { root ->
                         browseRootName(root)
                         browseChildren(root, browseRootDocId(root))
+                    }
+                }
+                runCatching {
+                    for (c in customFonts) {
+                        com.xnotes.platform.FontCatalog.resolve(c.face, bold = false, italic = false)
                     }
                 }
             }
@@ -7209,7 +7250,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
      *  controller's held latch, and the vendor double-tap/click keycodes to their gesture handlers.
      *  Returns true when consumed, so the host swallows the key. */
     fun onStylusButtonKey(e: android.view.KeyEvent): Boolean {
-        if (e.keyCode == penDoubleTapKeycode) return onPenDoubleTapKey(e)
+        if (e.keyCode in penDoubleTapKeycodes) return onPenDoubleTapKey(e)
         if (e.keyCode in penButtonTapKeycodes) return onPenButtonTapKey(e)
         val down = when (e.action) {
             android.view.KeyEvent.ACTION_DOWN -> true
@@ -7222,37 +7263,50 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         return controller.onStylusButtonKey(e.keyCode, down)
     }
 
-    // Pens with no side button (e.g. Huawei M-Pencil) report a barrel double-tap as a vendor key
-    // code with no standard mapping (718). One physical double-tap arrives as two quick presses, so
-    // a pair within the window fires the mapped gesture once. Consumed only when the gesture is set.
-    private val penDoubleTapKeycode = 718
-    private val penDoubleTapMs = 600L
-    private var lastPenTapMs = 0L
+    // Huawei M-Pencil (718) sends raw pulses that require software double-tap pairing.
+    // HONOR Magic-Pencil 3 (755) and 4s (333) detect the double-tap in hardware/firmware,
+    // emitting ONE keycode per double-tap gesture.
+    private val penDoubleTapHardwareKeycodes = setOf(755, 131, 333, 601)
+    private val penDoubleTapKeycodes = setOf(718, 755, 131, 333, 601)
+    private val penDoubleTapMs = 850L
+    private var lastSoftwarePenTapMs = 0L
+    private var lastHardwarePenTapMs = 0L
+
     private fun onPenDoubleTapKey(e: android.view.KeyEvent): Boolean {
-        if (preferences.stylusDoubleTap == "none") return false
+        val action = preferences.stylusDoubleTap.takeIf { it != "none" }
+            ?: preferences.stylusButtonTap.takeIf { it != "none" }
+            ?: "toggle_eraser"
+        if (action == "none") return false
         if (e.action == android.view.KeyEvent.ACTION_DOWN) {
             val t = e.eventTime
-            if (lastPenTapMs != 0L && t - lastPenTapMs <= penDoubleTapMs) {
-                lastPenTapMs = 0L
-                dispatchTapGesture(preferences.stylusDoubleTap)
+            if (e.keyCode in penDoubleTapHardwareKeycodes) {
+                // Hardware/firmware already detected double-tap: fire immediately on first press with 300ms debounce
+                if (t - lastHardwarePenTapMs < 300L) return true
+                lastHardwarePenTapMs = t
+                android.util.Log.d("XnotesStylus", "Hardware double-tap key ${e.keyCode}: executing $action")
+                dispatchTapGesture(action)
             } else {
-                lastPenTapMs = t
+                // Software double-tap pair matching (e.g. Huawei 718): wait for 2 presses within 850ms
+                if (lastSoftwarePenTapMs != 0L && t - lastSoftwarePenTapMs <= penDoubleTapMs) {
+                    lastSoftwarePenTapMs = 0L
+                    android.util.Log.d("XnotesStylus", "Software double-tap pair matched: executing $action")
+                    dispatchTapGesture(action)
+                } else {
+                    lastSoftwarePenTapMs = t
+                }
             }
         }
         return true
     }
 
-    // Some pens report the side button as a momentary vendor key click, not a held state, so it can't
-    // drive the hold latch; fire the mapped gesture on key-down, ignore up. HONOR Magic-Pencil 4s ->
-    // 333; Lenovo Tab Pen Plus -> 601 (its one code with a clean down; it also emits 600/603/604 ups).
     // Redmi Smart Pen sends its two buttons as the plain page keys, so 92/93 stay claimable by a
     // hardware keyboard: an unmapped button falls through and still pages the note.
-    private val penButtonTapKeycodes = setOf(333, 601, 92, 93)
+    private val penButtonTapKeycodes = setOf(92, 93)
     private fun onPenButtonTapKey(e: android.view.KeyEvent): Boolean {
         val action = when (e.keyCode) {
             android.view.KeyEvent.KEYCODE_PAGE_UP -> preferences.stylusButton1Tap
             android.view.KeyEvent.KEYCODE_PAGE_DOWN -> preferences.stylusButton2Tap
-            else -> preferences.stylusButtonTap
+            else -> preferences.stylusButtonTap.takeIf { it != "none" } ?: preferences.stylusDoubleTap
         }
         if (action == "none") return false
         if (e.action == android.view.KeyEvent.ACTION_DOWN) dispatchTapGesture(action)

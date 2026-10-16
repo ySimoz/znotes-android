@@ -24,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -206,10 +207,17 @@ private fun SectionCard(
     content: @Composable () -> Unit,
 ) {
     val palette = LocalPalette.current
+    val lastBounds = remember { arrayOfNulls<Rect>(1) }
     SectionCardScaffold(
         modifier = Modifier
             .alpha(if (dimmed) 0.35f else 1f)
-            .onGloballyPositioned { onBounds(it.boundsInRoot()) }
+            .onGloballyPositioned {
+                val b = it.boundsInRoot()
+                if (b != lastBounds[0]) {
+                    lastBounds[0] = b
+                    onBounds(b)
+                }
+            }
             .clip(MaterialTheme.shapes.small)
             .border(1.dp, (if (targeted) palette.accent else palette.border).toComposeColor(), MaterialTheme.shapes.small)
             .padding(start = 6.dp, top = 2.dp, end = 2.dp, bottom = 6.dp),
@@ -273,9 +281,16 @@ private fun SectionDragStrip(
     val dMove by rememberUpdatedState(onDrag)
     val dEnd by rememberUpdatedState(onDrop)
     val dCancel by rememberUpdatedState(onCancel)
+    val lastBounds = remember { arrayOfNulls<Rect>(1) }
     Box(
         modifier
-            .onGloballyPositioned { onBounds(it.boundsInRoot()) }
+            .onGloballyPositioned {
+                val b = it.boundsInRoot()
+                if (b != lastBounds[0]) {
+                    lastBounds[0] = b
+                    onBounds(b)
+                }
+            }
             .pointerInput(Unit) {
                 detectDragGesturesAfterLongPress(
                     onDragStart = { dStart(it) },
@@ -306,12 +321,19 @@ private fun ChipCell(
     val dMove by rememberUpdatedState(onDrag)
     val dEnd by rememberUpdatedState(onDrop)
     val dCancel by rememberUpdatedState(onCancel)
+    val lastBounds = remember { arrayOfNulls<Rect>(1) }
     ChipFace(
         item = item,
         visible = visible,
         modifier = Modifier
             .alpha(if (dragging) 0.15f else 1f)
-            .onGloballyPositioned { onBounds(it.boundsInRoot()) }
+            .onGloballyPositioned {
+                val b = it.boundsInRoot()
+                if (b != lastBounds[0]) {
+                    lastBounds[0] = b
+                    onBounds(b)
+                }
+            }
             .pointerInput(item) { detectTapGestures(onTap = { tap() }) }
             .pointerInput(item) {
                 detectDragGesturesAfterLongPress(

@@ -314,9 +314,22 @@
     <!-- Preferences -->
     <string name="back_to_home">Back to home</string>
     <string name="show_sidebar">Show sidebar</string>
+    <string name="show_folder_tree">Show folder tree</string>
+    <string name="hide_folder_tree">Hide folder tree</string>
+    <string name="folder_tree_title">Folders</string>
+    <string name="tree_show_files">Show notes and canvases in folder tree</string>
+    <string name="tree_add_folder">Create folder</string>
+    <string name="tree_move_folder">Move item</string>
+    <string name="tree_folder_created_error">Could not create folder.</string>
+    <string name="tree_folder_moved_error">Could not move item.</string>
     <string name="preferences">Preferences</string>
     <string name="reset_to_defaults">Reset to defaults</string>
     <string name="pref_general">General</string>
+    <string name="pref_language">Language</string>
+    <string name="language_system">System default</string>
+    <string name="language_en">English</string>
+    <string name="language_it">Italiano</string>
+    <string name="language_zh_hans">简体中文</string>
     <string name="pref_ui_theme">UI theme</string>
     <string name="theme_system">System</string>
     <string name="theme_dark">Dark</string>
@@ -729,7 +742,7 @@
     <!-- Canvas and storage -->
     <string name="pull_to_add_page">Pull to add page</string>
     <string name="release_to_add_page">Release to add page</string>
-    <string name="app_storage">App storage</string>
+    <string name="app_storage">Home</string>
 
     <!-- Explorer: dates, counts and kinds -->
     <string name="today">Today</string>

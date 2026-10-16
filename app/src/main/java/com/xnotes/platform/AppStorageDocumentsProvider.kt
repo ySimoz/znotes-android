@@ -116,7 +116,7 @@ class AppStorageDocumentsProvider : DocumentsProvider() {
         }
         cursor.newRow().apply {
             add(Document.COLUMN_DOCUMENT_ID, documentId)
-            add(Document.COLUMN_DISPLAY_NAME, if (documentId == ROOT_DOC_ID) context?.getString(R.string.app_storage).orEmpty() else file.name)
+            add(Document.COLUMN_DISPLAY_NAME, if (documentId == ROOT_DOC_ID) context?.getString(R.string.home).orEmpty() else file.name)
             add(Document.COLUMN_MIME_TYPE, if (isDir) Document.MIME_TYPE_DIR else mimeOf(file))
             add(Document.COLUMN_SIZE, file.length())
             add(Document.COLUMN_LAST_MODIFIED, file.lastModified())

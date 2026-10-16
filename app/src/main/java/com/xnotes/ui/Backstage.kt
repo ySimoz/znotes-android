@@ -66,10 +66,12 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -83,6 +85,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -101,6 +104,7 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -127,6 +131,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.xnotes.R
 import com.xnotes.core.model.Rgba
 import com.xnotes.platform.PdfOpenError
@@ -279,6 +284,7 @@ private fun BackstageContent(
         ExplorerLink(explorerNav, { explorerNav = null }) { folder, color, recent -> explorerFolder = folder; explorerColor = color; explorerRecent = recent }
     }
     val scope = rememberCoroutineScope()
+    val dragDrop = remember(editor.browseRoot) { ExplorerDragDropState() }
     var renamingColor by remember { mutableStateOf<Rgba?>(null) }
     // Colour names live in the notes folder, so pick up another device's edits whenever Home comes back.
     LaunchedEffect(editor.browseRoot, editor.noteOpen) { withContext(Dispatchers.IO) { editor.loadColorNames() } }
@@ -294,7 +300,8 @@ private fun BackstageContent(
     LaunchedEffect(editor.browseRoot) { editor.browseRoot?.let { r -> withContext(Dispatchers.IO) { editor.purgeExpiredTrash(r, prefs.trashDays) } } }
     // Kept while its inputs hold, so folding the sidebar never recomposes the rail or the sidebar.
     val showRecent = prefs.sidebarRecent && editor.browseRoot != null
-    val nav = remember(view, shownColors, activeColor, pins, activePin, trashCount, showRecent, recentActive) {
+    val treeHomeLabel = stringResource(R.string.home)
+    val nav = remember(view, shownColors, activeColor, pins, activePin, trashCount, showRecent, recentActive, editor.browseRoot, explorerFolder, treeHomeLabel, prefs.sidebarFolderTree, prefs.sidebarTreeFiles) {
         SidebarNav(
             view = view,
             homeSelected = view == BackstageView.HOME && activePin < 0 && activeColor == null && !recentActive,
@@ -312,6 +319,15 @@ private fun BackstageContent(
             onForgetColor = { c -> scope.launch { withContext(Dispatchers.IO) { editor.setColorName(c, null) } } },
             onOpenPin = { selectView(BackstageView.HOME); explorerNav = ExplorerNav(it.uri) },
             onUnpin = { editor.unpinFolder(it.uri) },
+            treeEditor = editor,
+            dragDrop = dragDrop,
+            treeRoot = editor.browseRoot.takeIf { prefs.sidebarFolderTree },
+            treeRootName = editor.browseRoot?.let { if (editor.isInternalStorage(it)) treeHomeLabel else (editor.cachedRootName(it) ?: treeHomeLabel) } ?: treeHomeLabel,
+            treeCurrentDocId = editor.browseRoot?.let { root -> explorerFolder ?: editor.browseRootDocId(root) },
+            treeShowFiles = prefs.sidebarTreeFiles,
+            treeTrashDays = prefs.trashDays,
+            onOpenTreeFolder = { uri -> selectView(BackstageView.HOME); explorerNav = ExplorerNav(uri) },
+            onOpenTreeFile = calls.openFile,
         )
     }
     renamingColor?.let { c -> ColorNameDialog(editor, c) { renamingColor = null } }
@@ -336,7 +352,7 @@ private fun BackstageContent(
         Box(Modifier.fillMaxSize().background(palette.bg.toComposeColor())) {
             BackstageMain(
                 Modifier.fillMaxSize(), editor, view, compact, drawerOpen, { animateClose = true; drawerOpen = true }, { selectView(BackstageView.HOME) },
-                calls, createMode, { createMode = it }, onImportCodeTheme, onImportFont, link, { selectView(BackstageView.PREFERENCES) },
+                calls, createMode, { createMode = it }, onImportCodeTheme, onImportFont, link, dragDrop, { selectView(BackstageView.PREFERENCES) },
             )
             AnimatedVisibility(
                 visible = drawerOpen,
@@ -369,7 +385,7 @@ private fun BackstageContent(
                     layout(constraints.maxWidth, placeable.height) { placeable.place(inset, 0) }
                 },
                 editor, view, compact, true, { setRailed(false) }, { selectView(BackstageView.HOME) },
-                calls, createMode, { createMode = it }, onImportCodeTheme, onImportFont, link, { selectView(BackstageView.PREFERENCES) },
+                calls, createMode, { createMode = it }, onImportCodeTheme, onImportFont, link, dragDrop, { selectView(BackstageView.PREFERENCES) },
             )
             // Both stay composed so a fold never pays to build one; only the current one is measured and placed.
             Layout(
@@ -404,6 +420,14 @@ private class ExplorerLink(
     val onPlace: (folderDocId: String?, color: Rgba?, recent: Boolean) -> Unit,
 )
 
+/** Shared hit targets and drag state so the sidebar tree and main explorer can exchange drops. */
+private class ExplorerDragDropState {
+    // Keep live coordinates rather than cached rectangles so scrolling doesn't stale the hit targets.
+    val targets = HashMap<String, Pair<String, LayoutCoordinates>>()
+    var active by mutableStateOf(false)
+    var targetDocId by mutableStateOf<String?>(null)
+}
+
 /** What the sidebar and its rail show and do, shared so the two never drift apart. */
 private class SidebarNav(
     val view: BackstageView,
@@ -426,6 +450,15 @@ private class SidebarNav(
     val onForgetColor: (Rgba) -> Unit,
     val onOpenPin: (PinnedFolder) -> Unit,
     val onUnpin: (PinnedFolder) -> Unit,
+    val treeEditor: Editor,
+    val dragDrop: ExplorerDragDropState,
+    val treeRoot: String?,
+    val treeRootName: String,
+    val treeCurrentDocId: String?,
+    val treeShowFiles: Boolean,
+    val treeTrashDays: Int,
+    val onOpenTreeFolder: (String?) -> Unit,
+    val onOpenTreeFile: (String) -> Unit,
 )
 
 /** The full sidebar: a pane on wide screens, a slide-over drawer on phones. */
@@ -449,6 +482,19 @@ private fun BackstageSidebar(modifier: Modifier, nav: SidebarNav, onCollapse: ()
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             Command(XnotesIcons.home, stringResource(R.string.home), selected = nav.homeSelected) { nav.onHome() }
             nav.recent?.let { on -> Command(XnotesIcons.clock, stringResource(R.string.recent), selected = on) { nav.onRecent() } }
+            if (nav.treeRoot != null) {
+                SidebarFolderTree(
+                    editor = nav.treeEditor,
+                    dragDrop = nav.dragDrop,
+                    root = nav.treeRoot,
+                    rootName = nav.treeRootName,
+                    currentDocId = nav.treeCurrentDocId ?: nav.treeEditor.browseRootDocId(nav.treeRoot),
+                    showFiles = nav.treeShowFiles,
+                    trashDays = nav.treeTrashDays,
+                    onOpenFolder = nav.onOpenTreeFolder,
+                    onOpenFile = nav.onOpenTreeFile,
+                )
+            }
             if (nav.colors.isNotEmpty()) {
                 SidebarLabel(stringResource(R.string.toolbar_colours))
                 nav.colors.forEach { (color, name) ->
@@ -532,6 +578,7 @@ private fun BackstageMain(
     onImportCodeTheme: () -> Unit,
     onImportFont: () -> Unit,
     link: ExplorerLink,
+    dragDrop: ExplorerDragDropState,
     onOpenPreferences: () -> Unit,
 ) {
     val palette = LocalPalette.current
@@ -560,7 +607,7 @@ private fun BackstageMain(
         }
         Box(Modifier.weight(1f).fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp)) {
             when (view) {
-                BackstageView.HOME -> HomePane(editor, calls, createMode, onCreateMode, sidebarOpen, onShowSidebar, link)
+                BackstageView.HOME -> HomePane(editor, calls, createMode, onCreateMode, sidebarOpen, onShowSidebar, link, dragDrop)
                 BackstageView.PREFERENCES -> PreferencesPane(editor, compact, sidebarOpen, onShowSidebar, onBackToHome, onImportCodeTheme, onImportFont)
                 BackstageView.TRASH -> TrashPane(editor, sidebarOpen, onShowSidebar, onOpenPreferences)
                 BackstageView.ABOUT -> AboutPane()
@@ -811,12 +858,13 @@ private fun HomePane(
     sidebarOpen: Boolean,
     onShowSidebar: () -> Unit,
     link: ExplorerLink,
+    dragDrop: ExplorerDragDropState,
 ) {
     val focusManager = LocalFocusManager.current
     // A tap on empty space anywhere in the pane drops focus from the search field, dismissing it
     // (children like tiles and buttons consume their own taps, so this only fires "outside").
     Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } }) {
-        ExplorerSection(editor, calls, createMode, onCreateMode, sidebarOpen, onShowSidebar, link)
+        ExplorerSection(editor, calls, createMode, onCreateMode, sidebarOpen, onShowSidebar, link, dragDrop)
     }
 }
 
@@ -865,6 +913,7 @@ private fun ExplorerSection(
     sidebarOpen: Boolean,
     onShowSidebar: () -> Unit,
     link: ExplorerLink,
+    dragDrop: ExplorerDragDropState,
 ) {
     val palette = LocalPalette.current
     val root = editor.browseRoot
@@ -1089,16 +1138,14 @@ private fun ExplorerSection(
         else withContext(Dispatchers.IO) { folders.associate { it.documentUri to editor.folderItemCount(root, it) } }
     }
 
-    // Drag-to-move state. While a selection is being dragged onto a folder, [dragPos] is the finger
-    // position in window coords, [folderSpots] maps each visible folder to its coordinates for
-    // hit-testing, [dropTargetUri] is the folder under the finger, and [pulseUri] flashes the folder a
-    // dropped move just landed in. [boxCoords] anchors the floating preview into the body's own space.
+    // Drag-to-move state. [dragPos] is the finger in window coordinates, [folderSpots] and [fileSpots]
+    // keep live coordinates for visible items, and [pulseUri] flashes a local folder after a drop.
+    // Shared target coordinates also let drags cross between the sidebar and this pane.
     // Coordinates, not rects: tiles move every frame of a scroll or resize, and only a drag needs bounds.
     val folderSpots = remember(root) { HashMap<String, LayoutCoordinates>() }
     val fileSpots = remember(root) { HashMap<String, LayoutCoordinates>() }
     var dragItems by remember(root) { mutableStateOf<List<BrowseEntry>>(emptyList()) }
     var dragPos by remember(root) { mutableStateOf<Offset?>(null) }
-    var dropTargetUri by remember(root) { mutableStateOf<String?>(null) }
     var pulseUri by remember(root) { mutableStateOf<String?>(null) }
     var boxCoords by remember(root) { mutableStateOf<LayoutCoordinates?>(null) }
     var dragCardSize by remember(root) { mutableStateOf<IntSize?>(null) }
@@ -1115,8 +1162,12 @@ private fun ExplorerSection(
     }
     // The folder under the finger, ignoring any folder that's itself part of the dragged selection.
     fun updateDropTarget(pos: Offset) {
-        dropTargetUri = folderSpots.entries
-            .firstOrNull { (uri, c) -> c.isAttached && c.boundsInWindow().contains(pos) && dragItems.none { it.documentUri == uri } }?.key
+        val hit = dragDrop.targets.values.firstOrNull { (docId, coordinates) ->
+            coordinates.isAttached && coordinates.boundsInWindow().contains(pos) && dragItems.none { item ->
+                item.isDir && (editor.browseDocId(item.documentUri) == docId || com.xnotes.core.util.DocKeys.within(docId, editor.browseDocId(item.documentUri)))
+            }
+        }?.first
+        dragDrop.targetDocId = hit
     }
     // While dragging a selection near the top/bottom edge of the body, keep it scrolling so a folder
     // that's currently off-screen can still be reached, the same way the toolbar drag does.
@@ -1199,7 +1250,7 @@ private fun ExplorerSection(
             selecting = { selection.isNotEmpty() },
             isCut = { e -> clipboard?.let { c -> c.isCut && c.entries.any { it.documentUri == e.documentUri } } == true },
             isPinned = { e -> e.isDir && editor.isPinned(e.documentUri) },
-            isDropTarget = { e -> dragPos != null && dropTargetUri == e.documentUri },
+            isDropTarget = { e -> dragDrop.active && dragDrop.targetDocId == editor.browseDocId(e.documentUri) },
             isPulsing = { e -> pulseUri == e.documentUri },
             onPulseDone = { e -> if (pulseUri == e.documentUri) pulseUri = null },
             onClick = { e ->
@@ -1217,7 +1268,13 @@ private fun ExplorerSection(
             },
             onPlaced = { e, c ->
                 val spots = if (e.isDir) folderSpots else fileSpots
-                if (c == null) spots.remove(e.documentUri) else spots[e.documentUri] = c
+                if (c == null) {
+                    spots.remove(e.documentUri)
+                    if (e.isDir) dragDrop.targets.remove("main:${e.documentUri}")
+                } else {
+                    spots[e.documentUri] = c
+                    if (e.isDir) dragDrop.targets["main:${e.documentUri}"] = editor.browseDocId(e.documentUri) to c
+                }
             },
             menu = EntryActions(
                 rename = { renaming = it },
@@ -1457,31 +1514,22 @@ private fun ExplorerSection(
                         if (!longPress) return@awaitEachGesture
                         // Long-press fired. Find the file tile under the finger; ignore folders/empty.
                         val winDown = boxCoords?.localToWindow(down.position) ?: return@awaitEachGesture
-                        val hitUri = fileSpots.entries.firstOrNull { it.value.isAttached && it.value.boundsInWindow().contains(winDown) }?.key
+                        val hitUri = (fileSpots.entries.map { it.key to it.value } + folderSpots.entries.map { it.key to it.value })
+                            .firstOrNull { (_, c) -> c.isAttached && c.boundsInWindow().contains(winDown) }?.first
                         if (hitUri == null) return@awaitEachGesture
                         if (selection.none { it.documentUri == hitUri }) {
-                            // First long-press selects. Consume to the up (Initial pass, ahead of the
-                            // tile) so its click can't toggle the selection straight back off.
-                            (filesNow.value.firstOrNull { it.documentUri == hitUri } ?: timeline?.files?.firstOrNull { it.documentUri == hitUri })?.let {
-                                renaming = null; opError = null; selection.add(it)
-                            }
-                            do {
-                                val e = awaitPointerEvent(PointerEventPass.Initial)
-                                e.changes.forEach { it.consume() }
-                            } while (e.changes.any { it.id == down.id && it.pressed })
-                            return@awaitEachGesture
+                            // The first long-press both selects and picks up the item. If the user
+                            // simply holds and releases, it remains selected; if they keep dragging,
+                            // the same gesture can move it without requiring a second long-press.
+                            val entry = filesNow.value.firstOrNull { it.documentUri == hitUri }
+                                ?: timeline?.files?.firstOrNull { it.documentUri == hitUri }
+                            if (entry == null) return@awaitEachGesture
+                            renaming = null; opError = null; selection.add(entry)
                         }
-                        // Second long-press on a selected tile: pick the whole selection up and drag it.
-                        // Dragging moves files only; if any folder is selected, claim the gesture but don't drag.
-                        if (selection.any { it.isDir }) {
-                            do {
-                                val e = awaitPointerEvent(PointerEventPass.Initial)
-                                e.changes.forEach { it.consume() }
-                            } while (e.changes.any { it.id == down.id && it.pressed })
-                            return@awaitEachGesture
-                        }
-                        val rect = fileSpots[hitUri]?.takeIf { it.isAttached }?.boundsInWindow()
+                        // A long-press on a selected item picks up the current selection.
+                        val rect = (fileSpots[hitUri] ?: folderSpots[hitUri])?.takeIf { it.isAttached }?.boundsInWindow()
                         dragItems = selection.toList()
+                        dragDrop.active = true
                         dragCardSize = rect?.let { IntSize(it.width.roundToInt(), it.height.roundToInt()) }
                         var pos = winDown
                         dragPos = pos
@@ -1498,17 +1546,15 @@ private fun ExplorerSection(
                             updateDropTarget(pos)
                         }
                         // Drop: move the carried notes into the highlighted folder, then pulse it.
-                        val target = dropTargetUri
+                        val targetDocId = dragDrop.targetDocId
                         val items = dragItems
-                        dragPos = null; dropTargetUri = null; dragItems = emptyList()
-                        if (target != null) {
-                            val targetDocId = editor.browseDocId(target)
-                            pulseUri = target; opError = null
+                        dragPos = null; dragItems = emptyList()
+                        dragDrop.active = false; dragDrop.targetDocId = null
+                        if (targetDocId != null) {
+                            pulseUri = folderSpots.keys.firstOrNull { editor.browseDocId(it) == targetDocId }
+                            opError = null
                             scope.launch {
-                                val ok = withContext(Dispatchers.IO) {
-                                    val carried = items.filter { it.documentUri != target }
-                                    editor.moveEntriesInto(root, carried, targetDocId) == carried.size
-                                }
+                                val ok = withContext(Dispatchers.IO) { editor.moveEntriesInto(root, items, targetDocId) == items.size }
                                 selection.clear(); refreshKey++
                                 if (!ok) opError = context.getString(R.string.err_move_some)
                             }
@@ -2105,7 +2151,7 @@ private fun StackedNoteCard(editor: Editor, entry: BrowseEntry, modifier: Modifi
             if (thumb != null) {
                 Image(thumb, null, contentScale = ContentScale.Crop, alignment = Alignment.TopCenter, modifier = Modifier.matchParentSize())
             } else {
-                Icon(XnotesIcons.file, null, tint = palette.textDim.toComposeColor(), modifier = Modifier.size(32.dp).align(Alignment.Center))
+                Icon(if (entry.isDir) XnotesIcons.folder else XnotesIcons.file, null, tint = palette.textDim.toComposeColor(), modifier = Modifier.size(32.dp).align(Alignment.Center))
             }
         }
         Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)) {
@@ -2115,6 +2161,378 @@ private fun StackedNoteCard(editor: Editor, entry: BrowseEntry, modifier: Modifi
                 Text(date, color = palette.textDim.toComposeColor(), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
+    }
+}
+
+/** Filters and sorts entries for display in the sidebar folder tree. */
+private fun filterTreeEntries(entries: List<BrowseEntry>, showFiles: Boolean): List<BrowseEntry> =
+    entries.filter { it.isDir || (showFiles && com.xnotes.core.util.DocumentKind.isDocument(it.name)) }
+        .sortedWith(compareBy<BrowseEntry> { !it.isDir }.thenBy { it.name.lowercase() })
+
+/** Configurable folder hierarchy embedded in the existing navigation sidebar. */
+@Composable
+private fun SidebarFolderTree(
+    editor: Editor,
+    dragDrop: ExplorerDragDropState,
+    root: String,
+    rootName: String,
+    currentDocId: String,
+    showFiles: Boolean,
+    trashDays: Int,
+    onOpenFolder: (String?) -> Unit,
+    onOpenFile: (String) -> Unit,
+) {
+    val palette = LocalPalette.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val rootDocId = remember(root) { editor.browseRootDocId(root) }
+    val folderBounds = remember(root) { mutableMapOf<String, androidx.compose.ui.geometry.Rect>() }
+    val movableBounds = remember(root) { mutableMapOf<String, Pair<BrowseEntry, androidx.compose.ui.geometry.Rect>>() }
+    var treeCoordinates by remember(root) { mutableStateOf<LayoutCoordinates?>(null) }
+    var contextMenuEntry by remember(root) { mutableStateOf<BrowseEntry?>(null) }
+    var draggingEntry by remember(root) { mutableStateOf<BrowseEntry?>(null) }
+    var dragPosition by remember(root) { mutableStateOf<Offset?>(null) }
+    var rootExpanded by remember(root) { mutableStateOf(true) }
+    val expanded = remember(root) { mutableStateMapOf<String, Boolean>() }
+    var createFolderOpen by remember { mutableStateOf(false) }
+    var createFolderError by remember { mutableStateOf<String?>(null) }
+    var renaming by remember { mutableStateOf<BrowseEntry?>(null) }
+    var deleting by remember { mutableStateOf<BrowseEntry?>(null) }
+    var moving by remember { mutableStateOf<BrowseEntry?>(null) }
+    var moveError by remember { mutableStateOf(false) }
+    val homeLabel = stringResource(R.string.home)
+    val resolvedRootName by produceState(if (editor.isInternalStorage(root)) homeLabel else rootName, root, rootName) {
+        value = if (editor.isInternalStorage(root)) homeLabel else (withContext(Dispatchers.IO) { editor.browseRootName(root) ?: rootName })
+    }
+    val initialEntries = remember(root, rootDocId, showFiles) {
+        editor.cachedChildren(root, rootDocId)?.let { filterTreeEntries(it, showFiles) } ?: emptyList()
+    }
+    val entries by produceState(initialEntries, root, rootDocId, editor.treeVersion, showFiles) {
+        value = withContext(Dispatchers.IO) {
+            filterTreeEntries(editor.browseChildren(root, rootDocId), showFiles)
+        }
+    }
+    fun requestDelete(entry: BrowseEntry) {
+        if (trashDays == 0) {
+            deleting = entry
+            return
+        }
+        scope.launch {
+            val (trashed, failed) = withContext(Dispatchers.IO) { editor.trashEntries(root, listOf(entry)) }
+            if (trashed.isNotEmpty()) {
+                editor.say(
+                    context.getString(R.string.moved_one_to_trash, entry.name),
+                    context.getString(R.string.undo) to { editor.undoTrash(root, trashed) },
+                )
+            }
+            if (failed.isNotEmpty()) {
+                editor.say(context.resources.getQuantityString(R.plurals.err_move_items_to_trash, failed.size, failed.size))
+            }
+        }
+    }
+    Box(Modifier.fillMaxWidth()) {
+    Column(
+        Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 6.dp)
+            .onGloballyPositioned { treeCoordinates = it }
+            .pointerInput(root) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val longPress = try {
+                        withTimeout(viewConfiguration.longPressTimeoutMillis) {
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                val change = event.changes.firstOrNull { it.id == down.id }
+                                if (change == null || !change.pressed || change.isConsumed) return@withTimeout false
+                                if (event.changes.any { it.id != down.id && it.pressed }) return@withTimeout false
+                                if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) return@withTimeout false
+                            }
+                            @Suppress("UNREACHABLE_CODE") false
+                        }
+                    } catch (_: PointerEventTimeoutCancellationException) {
+                        true
+                    }
+                    if (!longPress) return@awaitEachGesture
+                    val downInWindow = treeCoordinates?.localToWindow(down.position) ?: return@awaitEachGesture
+                    val source = movableBounds.values.firstOrNull { it.second.contains(downInWindow) }?.first
+                        ?: return@awaitEachGesture
+                    var didDrag = false
+                    var lastTarget: String? = null
+                    // Show the folder actions on long-press. If the pointer then moves past touch slop,
+                    // dismiss the popup and continue the same gesture as a drag.
+                    contextMenuEntry = source
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        val distance = (change.position - down.position).getDistance()
+                        val point = treeCoordinates?.localToWindow(change.position)
+                        if (!didDrag && distance > viewConfiguration.touchSlop) {
+                            didDrag = true
+                            contextMenuEntry = null
+                            draggingEntry = source
+                            dragDrop.active = true
+                        }
+                        if (didDrag) {
+                            dragPosition = change.position
+                            if (point != null) {
+                                lastTarget = dragDrop.targets.values.firstOrNull { (docId, coordinates) ->
+                                    coordinates.isAttached && coordinates.boundsInWindow().contains(point) && !(source.isDir && (docId == editor.browseDocId(source.documentUri) || com.xnotes.core.util.DocKeys.within(docId, editor.browseDocId(source.documentUri))))
+                                }?.first
+                                dragDrop.targetDocId = lastTarget
+                            }
+                        }
+                        change.consume()
+                        if (!change.pressed) break
+                    }
+                    if (didDrag) {
+                        val target = lastTarget
+                        draggingEntry = null
+                        dragPosition = null
+                        dragDrop.active = false
+                        dragDrop.targetDocId = null
+                        val sourceId = editor.browseDocId(source.documentUri)
+                        if (target != null && target != source.parentDocId && !com.xnotes.core.util.DocKeys.within(target, sourceId)) {
+                            scope.launch {
+                                val ok = withContext(Dispatchers.IO) {
+                                    editor.moveEntriesInto(root, listOf(source), target) == 1
+                                }
+                                moveError = !ok
+                            }
+                        }
+                    }
+                }
+            },
+    ) {
+        HorizontalDivider(color = palette.border.toComposeColor(), modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
+        Row(
+            Modifier.fillMaxWidth().padding(start = 18.dp, end = 8.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(stringResource(R.string.folder_tree_title), color = palette.accent.toComposeColor(), fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Tooltip(stringResource(R.string.tree_add_folder)) {
+                IconButton(onClick = { createFolderError = null; createFolderOpen = true }, modifier = Modifier.size(36.dp)) {
+                    Icon(XnotesIcons.plus, stringResource(R.string.tree_add_folder), tint = palette.accent.toComposeColor(), modifier = Modifier.size(20.dp))
+                }
+            }
+        }
+        Box(Modifier.fillMaxWidth().onGloballyPositioned {
+            val bounds = it.boundsInWindow()
+            folderBounds[rootDocId] = bounds
+            dragDrop.targets["sidebar:root"] = rootDocId to it
+        }) {
+            DisposableEffect(rootDocId) { onDispose { dragDrop.targets.remove("sidebar:root") } }
+            FolderTreeRow(
+                name = resolvedRootName, depth = 0, selected = currentDocId == rootDocId, expanded = rootExpanded,
+                palette = palette, onSelect = { onOpenFolder(null) }, onToggle = { rootExpanded = !rootExpanded },
+                dropTarget = dragDrop.targetDocId == rootDocId,
+            )
+        }
+        if (rootExpanded) entries.forEach { entry ->
+            if (entry.isDir) FolderTreeNode(
+                editor, root, entry, 1, currentDocId, expanded, palette, showFiles, trashDays,
+                onOpenFolder, onOpenFile, onRename = { renaming = it }, onDelete = { requestDelete(it) }, onMove = { moving = it },
+                folderBounds = folderBounds, movableBounds = movableBounds,
+                contextMenuEntry = contextMenuEntry, onContextMenuChange = { contextMenuEntry = it },
+                dropTargetDocId = dragDrop.targetDocId,
+                dragDrop = dragDrop,
+            ) else Box(Modifier.fillMaxWidth().onGloballyPositioned {
+                movableBounds[entry.documentUri] = entry to it.boundsInWindow()
+            }) {
+                DisposableEffect(entry.documentUri) {
+                    onDispose { movableBounds.remove(entry.documentUri) }
+                }
+                FolderTreeRow(
+                    name = com.xnotes.core.util.DocumentKind.stripSuffix(entry.name), depth = 1,
+                    selected = false, expanded = false, palette = palette,
+                    onSelect = { onOpenFile(entry.documentUri) }, onToggle = {}, expandable = false,
+                    rowIcon = if (entry.name.endsWith(".xcanvas", true)) XnotesIcons.canvas else XnotesIcons.file,
+                )
+                DropdownMenu(expanded = contextMenuEntry?.documentUri == entry.documentUri, onDismissRequest = { contextMenuEntry = null }) {
+                    DropdownMenuItem(text = { Text(stringResource(R.string.rename)) }, onClick = { contextMenuEntry = null; renaming = entry })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.move_to_folder_ellipsis)) }, onClick = { contextMenuEntry = null; moving = entry })
+                    DropdownMenuItem(
+                        text = { Text(if (trashDays == 0) stringResource(R.string.delete) else stringResource(R.string.move_to_trash)) },
+                        onClick = { contextMenuEntry = null; requestDelete(entry) },
+                    )
+                }
+            }
+        }
+    }
+    val dragEntry = draggingEntry
+    val pointer = dragPosition
+    if (dragEntry != null && pointer != null) {
+        Row(
+            Modifier.offset { IntOffset((pointer.x + 14f).toInt(), (pointer.y + 14f).toInt()) }
+                .zIndex(10f)
+                .width(220.dp)
+                .clip(MaterialTheme.shapes.small)
+                .background(MaterialTheme.colorScheme.surface)
+                .border(1.dp, palette.accent.toComposeColor(), MaterialTheme.shapes.small)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(when { dragEntry.isDir -> XnotesIcons.folder; dragEntry.name.endsWith(".xcanvas", true) -> XnotesIcons.canvas; else -> XnotesIcons.file }, null, tint = palette.accent.toComposeColor(), modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(com.xnotes.core.util.DocumentKind.stripSuffix(dragEntry.name), color = palette.text.toComposeColor(), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(8.dp))
+            Icon(XnotesIcons.moveToFolder, null, tint = palette.accent.toComposeColor(), modifier = Modifier.size(16.dp))
+        }
+    }
+    }
+    if (createFolderOpen) NameDialog(
+        title = stringResource(R.string.new_folder), initial = "", confirmLabel = stringResource(R.string.create),
+        placeholder = stringResource(R.string.folder_name), allowEmpty = false, error = createFolderError,
+        onConfirm = { name -> scope.launch {
+            val ok = withContext(Dispatchers.IO) { editor.createFolder(root, currentDocId, name) }
+            if (ok) { createFolderOpen = false; createFolderError = null }
+            else createFolderError = context.getString(R.string.err_create_folder)
+        } },
+        onDismiss = { createFolderOpen = false; createFolderError = null },
+    )
+    renaming?.let { entry ->
+        val kind = com.xnotes.core.util.DocumentKind.ofName(entry.name)
+        NameDialog(
+            title = if (entry.isDir) stringResource(R.string.rename_folder) else stringResource(R.string.rename_note),
+            initial = entryLabel(entry),
+            confirmLabel = stringResource(R.string.rename),
+            allowEmpty = false,
+            onConfirm = { raw ->
+                val newName = if (entry.isDir || kind == null) raw else com.xnotes.core.util.DocumentKind.withSuffix(com.xnotes.core.util.DocumentKind.stripSuffix(raw), kind)
+                scope.launch {
+                    val ok = withContext(Dispatchers.IO) { editor.renameDocument(entry.documentUri, newName) }
+                    if (ok) renaming = null
+                }
+            },
+            onDismiss = { renaming = null },
+        )
+    }
+    deleting?.let { entry -> AlertDialog(
+        onDismissRequest = { deleting = null }, title = { Text(stringResource(R.string.delete_confirm_title)) },
+        text = { Text(stringResource(R.string.delete_one_confirm, entry.name)) },
+        confirmButton = { TextButton(onClick = {
+            val target = entry.documentUri; deleting = null
+            scope.launch {
+                val ok = withContext(Dispatchers.IO) { editor.deleteDocument(target) }
+                if (ok) onOpenFolder(null)
+            }
+        }) { Text(stringResource(R.string.delete)) } },
+        dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.cancel)) } },
+    ) }
+    moving?.let { entry ->
+        val movingId = editor.browseDocId(entry.documentUri)
+        FolderPickerDialog(
+            editor = editor, root = root, rootName = resolvedRootName,
+            title = stringResource(R.string.tree_move_folder), confirmLabel = stringResource(R.string.move_here),
+            start = emptyList(), blocked = { id -> com.xnotes.core.util.DocKeys.within(id, movingId) },
+            onPick = { target -> moving = null; scope.launch {
+                val ok = withContext(Dispatchers.IO) { editor.moveDocumentInto(root, entry.documentUri, entry.parentDocId, target) }
+                moveError = !ok
+            } },
+            onDismiss = { moving = null },
+        )
+    }
+    if (moveError) AlertDialog(
+        onDismissRequest = { moveError = false }, title = { Text(stringResource(R.string.tree_folder_moved_error)) },
+        text = { Text(stringResource(R.string.tree_folder_moved_error)) },
+        confirmButton = { TextButton(onClick = { moveError = false }) { Text(stringResource(R.string.done)) } },
+    )
+}
+
+@Composable
+private fun FolderTreeNode(
+    editor: Editor, root: String, entry: BrowseEntry, depth: Int, currentDocId: String,
+    expanded: MutableMap<String, Boolean>, palette: com.xnotes.ui.theme.Palette, showFiles: Boolean, trashDays: Int,
+    onOpenFolder: (String?) -> Unit, onOpenFile: (String) -> Unit,
+    onRename: (BrowseEntry) -> Unit, onDelete: (BrowseEntry) -> Unit, onMove: (BrowseEntry) -> Unit,
+    folderBounds: MutableMap<String, androidx.compose.ui.geometry.Rect>,
+    movableBounds: MutableMap<String, Pair<BrowseEntry, androidx.compose.ui.geometry.Rect>>,
+    contextMenuEntry: BrowseEntry?, onContextMenuChange: (BrowseEntry?) -> Unit,
+    dropTargetDocId: String?, dragDrop: ExplorerDragDropState,
+) {
+    val docId = remember(entry.documentUri) { editor.browseDocId(entry.documentUri) }
+    DisposableEffect(entry.documentUri) {
+        onDispose {
+            folderBounds.remove(docId); movableBounds.remove(entry.documentUri)
+            dragDrop.targets.remove("sidebar:${entry.documentUri}")
+        }
+    }
+    val isExpanded = expanded[docId] == true
+    val initialChildren = remember(root, docId, isExpanded, showFiles) {
+        if (!isExpanded) emptyList()
+        else editor.cachedChildren(root, docId)?.let { filterTreeEntries(it, showFiles) } ?: emptyList()
+    }
+    val children by produceState(initialChildren, root, docId, isExpanded, editor.treeVersion, showFiles) {
+        value = if (!isExpanded) emptyList() else withContext(Dispatchers.IO) {
+            filterTreeEntries(editor.browseChildren(root, docId), showFiles)
+        }
+    }
+    Box(Modifier.fillMaxWidth().onGloballyPositioned {
+        val bounds = it.boundsInWindow()
+        folderBounds[docId] = bounds
+        movableBounds[entry.documentUri] = entry to bounds
+        dragDrop.targets["sidebar:${entry.documentUri}"] = docId to it
+    }) {
+        FolderTreeRow(
+            name = entry.name, depth = depth, selected = currentDocId == docId, expanded = isExpanded,
+            palette = palette, onSelect = { onOpenFolder(entry.documentUri) },
+            onToggle = { expanded[docId] = !isExpanded }, dropTarget = dropTargetDocId == docId,
+        )
+        DropdownMenu(expanded = contextMenuEntry?.documentUri == entry.documentUri, onDismissRequest = { onContextMenuChange(null) }) {
+            DropdownMenuItem(text = { Text(stringResource(R.string.rename)) }, onClick = { onContextMenuChange(null); onRename(entry) })
+            DropdownMenuItem(text = { Text(stringResource(R.string.move_to_folder_ellipsis)) }, onClick = { onContextMenuChange(null); onMove(entry) })
+            DropdownMenuItem(text = { Text(if (trashDays == 0) stringResource(R.string.delete) else stringResource(R.string.move_to_trash)) }, onClick = { onContextMenuChange(null); onDelete(entry) })
+        }
+    }
+    if (isExpanded) children.forEach { child -> key(child.documentUri) {
+        if (child.isDir) FolderTreeNode(
+            editor, root, child, depth + 1, currentDocId, expanded, palette, showFiles, trashDays,
+            onOpenFolder, onOpenFile, onRename, onDelete, onMove, folderBounds, movableBounds,
+            contextMenuEntry, onContextMenuChange, dropTargetDocId, dragDrop,
+        ) else Box(Modifier.fillMaxWidth().onGloballyPositioned {
+            movableBounds[child.documentUri] = child to it.boundsInWindow()
+        }) {
+            DisposableEffect(child.documentUri) {
+                onDispose { movableBounds.remove(child.documentUri) }
+            }
+            FolderTreeRow(
+                name = com.xnotes.core.util.DocumentKind.stripSuffix(child.name), depth = depth + 1,
+                selected = false, expanded = false, palette = palette,
+                onSelect = { onOpenFile(child.documentUri) }, onToggle = {}, expandable = false,
+                rowIcon = if (child.name.endsWith(".xcanvas", true)) XnotesIcons.canvas else XnotesIcons.file,
+            )
+            DropdownMenu(expanded = contextMenuEntry?.documentUri == child.documentUri, onDismissRequest = { onContextMenuChange(null) }) {
+                DropdownMenuItem(text = { Text(stringResource(R.string.rename)) }, onClick = { onContextMenuChange(null); onRename(child) })
+                DropdownMenuItem(text = { Text(stringResource(R.string.move_to_folder_ellipsis)) }, onClick = { onContextMenuChange(null); onMove(child) })
+                DropdownMenuItem(text = { Text(if (trashDays == 0) stringResource(R.string.delete) else stringResource(R.string.move_to_trash)) }, onClick = { onContextMenuChange(null); onDelete(child) })
+            }
+        }
+    } }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun FolderTreeRow(
+    name: String, depth: Int, selected: Boolean, expanded: Boolean,
+    palette: com.xnotes.ui.theme.Palette, onSelect: () -> Unit, onToggle: () -> Unit,
+    expandable: Boolean = true, rowIcon: ImageVector = XnotesIcons.folder, dropTarget: Boolean = false,
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = (8 + depth * 14).dp, end = 8.dp)
+            .clip(MaterialTheme.shapes.small)
+            .background(when { dropTarget -> palette.accent.toComposeColor().copy(alpha = 0.20f); selected -> palette.selectionBackground.toComposeColor(); else -> Color.Transparent })
+            .then(if (dropTarget) Modifier.border(1.dp, palette.accent.toComposeColor(), MaterialTheme.shapes.small) else Modifier)
+            .clickable(role = Role.Button, onClick = onSelect)
+            .padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (expandable) Icon(
+            XnotesIcons.chevronDown, null, tint = palette.textDim.toComposeColor(),
+            modifier = Modifier.size(16.dp).rotate(if (expanded) 0f else -90f).clickable(role = Role.Button, onClick = onToggle),
+        ) else Spacer(Modifier.width(16.dp))
+        Spacer(Modifier.width(6.dp))
+        Icon(rowIcon, null, tint = if (selected) palette.selectionForeground.toComposeColor() else palette.accent.toComposeColor(), modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(name, color = if (selected) palette.selectionForeground.toComposeColor() else palette.text.toComposeColor(), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
     }
 }
 

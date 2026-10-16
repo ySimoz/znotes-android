@@ -12,6 +12,7 @@ import org.json.JSONObject
  */
 data class Preferences(
     val uiAppearance: String = "system", // "system" (follows OS dark/light) | "dark" | "light" | "oled"
+    val appLanguage: String = "system", // "system" (follows OS) | "en" | "it" | "zh-Hans"
     val materialMode: MaterialColourMode = MaterialColourMode.DUAL,
     val materialSingleSeed: Rgba = DEFAULT_MATERIAL_SINGLE,
     val materialDualSeed: Rgba = DEFAULT_MATERIAL_DUAL,
@@ -96,6 +97,10 @@ data class Preferences(
     val sidebarPinned: Boolean = true,
     val sidebarColours: Boolean = true,
     val sidebarTrash: Boolean = true,
+    /** Show the folder tree in the Home sidebar. */
+    val sidebarFolderTree: Boolean = true,
+    /** Include note and canvas files in the folder tree, not only folders. */
+    val sidebarTreeFiles: Boolean = false,
     /** Where Home opens: "top" (the notes folder), "last" (the folder last shown) or "shelves" (the notes folder under Recent and Pinned). */
     val homeOpensTo: String = "top",
     /** How the explorer writes dates: "relative" (2 days ago), "day" (Wed 17:30) or "date" (16 Sep 2026). */
@@ -181,12 +186,15 @@ data class Preferences(
             lastCodeLanguage.takeIf { it.isNotEmpty() }?.let { put("last_code_language", it) }
             put("markdown_input", markdownInput)
             put("slash_commands", slashCommands)
+            if (appLanguage != "system") put("app_language", appLanguage)
         }
         .put("switcher_layouts", org.json.JSONArray().apply { switcherLayouts.forEach { put(it.id) } })
         .put("sidebar_recent", sidebarRecent)
         .put("sidebar_pinned", sidebarPinned)
         .put("sidebar_colours", sidebarColours)
         .put("sidebar_trash", sidebarTrash)
+        .put("sidebar_folder_tree", sidebarFolderTree)
+        .put("sidebar_tree_files", sidebarTreeFiles)
         .put("home_opens_to", homeOpensTo)
         .put("date_style", dateStyle)
         .put("tap_previews", tapPreviews)
@@ -231,6 +239,9 @@ data class Preferences(
             val legacyDualAccent = legacySeed ?: Rgba.fromHex(o.optString("accent_color")) ?: DEFAULT_ACCENT
             return Preferences(
                 uiAppearance = appearance,
+                appLanguage = o.optString("app_language", "system").let {
+                    if (it == "en" || it == "it" || it == "zh-Hans") it else "system"
+                },
                 materialMode = materialMode,
                 materialSingleSeed = Rgba.fromHex(o.optString("material_single_seed"))
                     ?: legacySeed?.takeIf { !legacyDual } ?: DEFAULT_MATERIAL_SINGLE,
@@ -294,6 +305,8 @@ data class Preferences(
                 sidebarPinned = o.optBoolean("sidebar_pinned", true),
                 sidebarColours = o.optBoolean("sidebar_colours", true),
                 sidebarTrash = o.optBoolean("sidebar_trash", true),
+                sidebarFolderTree = o.optBoolean("sidebar_folder_tree", true),
+                sidebarTreeFiles = o.optBoolean("sidebar_tree_files", false),
                 homeOpensTo = o.optString("home_opens_to", "top").let { if (it == "last" || it == "shelves") it else "top" },
                 dateStyle = o.optString("date_style", "day").let { if (it == "relative" || it == "date") it else "day" },
                 tapPreviews = o.optBoolean("tap_previews", false),

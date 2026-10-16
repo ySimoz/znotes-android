@@ -1,6 +1,9 @@
 # --- Planning / spec / AI artifacts (never commit) ---
 CLAUDE.md
 .claude/
+.specs/
+.agents/
+repomix-output.xml
 
 # --- Gradle ---
 .gradle/

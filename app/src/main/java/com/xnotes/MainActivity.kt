@@ -13,8 +13,11 @@ import android.view.MotionEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivityResultRegistryOwner
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.ActivityResultRegistryOwner
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -166,8 +169,64 @@ class MainActivity : ComponentActivity() {
                 ready = true
                 ed.prewarmBackstage() // warm recents/explorer caches so the first backstage open is instant
             }
+            val currentLanguage = ed.appLanguage
+            LaunchedEffect(currentLanguage) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    val localeManager = context.getSystemService(android.app.LocaleManager::class.java)
+                    val targetList = when (currentLanguage) {
+                        "system" -> android.os.LocaleList.getEmptyLocaleList()
+                        else -> android.os.LocaleList.forLanguageTags(currentLanguage)
+                    }
+                    if (localeManager != null && localeManager.applicationLocales != targetList) {
+                        localeManager.applicationLocales = targetList
+                    }
+                }
+            }
+            val baseConfig = LocalConfiguration.current
+            val targetLocale = remember(currentLanguage, baseConfig) {
+                if (currentLanguage == "system") {
+                    android.content.res.Resources.getSystem().configuration.locales.get(0) ?: java.util.Locale.getDefault()
+                } else {
+                    java.util.Locale.forLanguageTag(currentLanguage)
+                }
+            }
+            val localizedConfig = remember(targetLocale, baseConfig) {
+                android.content.res.Configuration(baseConfig).apply {
+                    if (currentLanguage == "system") {
+                        setLocales(android.content.res.Resources.getSystem().configuration.locales)
+                    } else {
+                        setLocales(android.os.LocaleList(targetLocale))
+                    }
+                    setLayoutDirection(targetLocale)
+                }
+            }
+            val activityResources = context.resources
+            remember(targetLocale) {
+                java.util.Locale.setDefault(targetLocale)
+                val conf = android.content.res.Configuration(activityResources.configuration).apply {
+                    if (currentLanguage == "system") {
+                        setLocales(android.content.res.Resources.getSystem().configuration.locales)
+                    } else {
+                        setLocales(android.os.LocaleList(targetLocale))
+                    }
+                    setLayoutDirection(targetLocale)
+                }
+                @Suppress("DEPRECATION")
+                activityResources.updateConfiguration(conf, activityResources.displayMetrics)
+                @Suppress("DEPRECATION")
+                context.applicationContext.resources.updateConfiguration(conf, context.applicationContext.resources.displayMetrics)
+            }
+            val localizedContext = remember(localizedConfig, context) {
+                context.createConfigurationContext(localizedConfig)
+            }
             XnotesTheme(ed.palette, ed.cornerStyle) {
-                CompositionLocalProvider(com.xnotes.ui.LocalToolbarLook provides ed.toolbarLook) {
+                CompositionLocalProvider(
+                    LocalConfiguration provides localizedConfig,
+                    LocalContext provides localizedContext,
+                    LocalActivityResultRegistryOwner provides (context as ActivityResultRegistryOwner),
+                    LocalOnBackPressedDispatcherOwner provides (context as androidx.activity.OnBackPressedDispatcherOwner),
+                    com.xnotes.ui.LocalToolbarLook provides ed.toolbarLook,
+                ) {
                     Box(modifier = Modifier.fillMaxSize()) {
                         if (ready) EditorScreen(
                             ed,
@@ -193,6 +252,7 @@ class MainActivity : ComponentActivity() {
     // before Compose focus routing, so the controller sees both press and release regardless of
     // which view holds focus. Other keys fall through to the normal dispatch.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        android.util.Log.d("XnotesStylus", "dispatchKeyEvent: action=${event.action} keyCode=${event.keyCode} scanCode=${event.scanCode} device=${event.device?.name}")
         // The pen writes in whichever pane has the focus, so its button belongs to that pane too.
         if (editor?.active?.onStylusButtonKey(event) == true) return true
         return super.dispatchKeyEvent(event)

@@ -22,11 +22,12 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -93,13 +94,13 @@ internal val pageColorPresets = listOf(
     Rgba(22, 22, 22), Rgba(13, 13, 13), Rgba(255, 255, 255), Rgba(247, 243, 233), Rgba(232, 232, 232),
 )
 /** One-tap filename templates offered beside the free-text field. */
-private val NAME_TEMPLATE_PRESETS = listOf(
+internal val NAME_TEMPLATE_PRESETS = listOf(
     NameTemplate.DEFAULT,
     "note_YYYY-MM-DD",
     "note_YYYY-MM-DD_HH-mm",
 )
-private val penButtonOptions = listOf("eraser" to R.string.tool_eraser, "pan" to R.string.tool_pan, "select" to R.string.tool_select, "none" to R.string.none)
-private val tapGestureOptions = listOf(
+internal val penButtonOptions = listOf("eraser" to R.string.tool_eraser, "pan" to R.string.tool_pan, "select" to R.string.tool_select, "none" to R.string.none)
+internal val tapGestureOptions = listOf(
     "none" to R.string.none,
     "undo" to R.string.undo,
     "redo" to R.string.redo,
@@ -141,7 +142,7 @@ fun PreferencesPane(
     // Follow out-of-pane preference changes too (the .scm import round-trips a picker).
     LaunchedEffect(editor.prefsVersion) { prefs = editor.preferences }
 
-    val scrollState = rememberScrollState()
+    val lazyListState = rememberLazyListState()
     // Which bar the toolbar section is arranging. The two are separate layouts, so the drag state
     // below always belongs to whichever is on screen.
     var canvasTab by remember { mutableStateOf(false) }
@@ -216,464 +217,111 @@ fun PreferencesPane(
             TextButton(onClick = { update(Preferences()) }) { Text(stringResource(R.string.reset_to_defaults), fontSize = 13.sp) }
         }
         Spacer(Modifier.height(12.dp))
-        Column(
-            // Ending at the keyboard's edge scrolls a focused field up out from under it.
-            Modifier.fillMaxSize().imePadding().verticalScroll(scrollState)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().imePadding()
                 .onGloballyPositioned { viewport = it.boundsInRoot() },
+            state = lazyListState,
             verticalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(bottom = 24.dp),
         ) {
-            SectionTitle(stringResource(R.string.pref_general))
-            FieldLabel(stringResource(R.string.pref_ui_theme))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Chip(stringResource(R.string.theme_system), prefs.uiAppearance == "system") { update(prefs.copy(uiAppearance = "system")) }
-                Chip(stringResource(R.string.theme_dark), prefs.uiAppearance == "dark") { update(prefs.copy(uiAppearance = "dark")) }
-                Chip(stringResource(R.string.theme_light), prefs.uiAppearance == "light") { update(prefs.copy(uiAppearance = "light")) }
-                Chip(stringResource(R.string.theme_oled), prefs.uiAppearance == "oled") { update(prefs.copy(uiAppearance = "oled")) }
+            item(key = "general") {
+                GeneralPreferencesSection(
+                    prefs = prefs,
+                    fullscreen = editor.fullscreen,
+                    onToggleFullscreen = { editor.setFullscreenPref(it) },
+                    onUpdate = ::update,
+                    onUpdateHome = ::updateHome,
+                )
             }
-            val systemColours = prefs.materialMode == MaterialColourMode.SYSTEM
-            FieldLabel(stringResource(R.string.material_tone))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Chip(stringResource(R.string.material_system_colours), systemColours) {
-                    update(prefs.copy(materialMode = MaterialColourMode.SYSTEM))
-                }
-                Chip(stringResource(R.string.material_single_tone), prefs.materialMode == MaterialColourMode.SINGLE) {
-                    update(prefs.copy(materialMode = MaterialColourMode.SINGLE))
-                }
-                Chip(stringResource(R.string.material_dual_tone), prefs.materialMode == MaterialColourMode.DUAL) {
-                    update(prefs.copy(materialMode = MaterialColourMode.DUAL))
-                }
+            item(key = "input") {
+                InputPreferencesSection(prefs = prefs, onUpdate = ::update)
             }
-            if (!systemColours) {
-                key(prefs.materialMode) { MaterialColourPicker(prefs, ::update) }
-                CustomMaterialControls(prefs, ::update)
-            } else if (Build.VERSION.SDK_INT < 31) {
-                Text(stringResource(R.string.material_system_fallback), color = palette.textDim.toComposeColor(), fontSize = 12.sp)
+            item(key = "new_notes") {
+                NewNotesPreferencesSection(
+                    prefs = prefs,
+                    stemPreview = "${editor.newNoteStem(emptySet())}.xnote",
+                    onUpdate = ::update,
+                )
             }
-            FieldLabel(stringResource(R.string.pref_corners))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                for ((style, label) in listOf(CornerStyle.SHARP to R.string.corners_sharp, CornerStyle.ROUNDED to R.string.corners_rounded, CornerStyle.SOFT to R.string.corners_soft)) {
-                    Chip(stringResource(label), prefs.cornerStyle == style) { updateHome(prefs.copy(cornerStyle = style)) }
-                }
+            item(key = "page") {
+                PagePreferencesSection(prefs = prefs, onUpdate = ::update)
             }
-            CheckRow(stringResource(R.string.pref_start_fullscreen), editor.fullscreen) { editor.setFullscreenPref(it) }
-
-            HorizontalDivider(color = palette.border.toComposeColor())
-            SectionTitle(stringResource(R.string.pref_input))
-            CheckRow(stringResource(R.string.pref_finger_draws), prefs.fingerDraws) { update(prefs.copy(fingerDraws = it)) }
-            FieldLabel(stringResource(R.string.pref_zoom_lock_pan))
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Chip(stringResource(R.string.pan_single), prefs.zoomLockPan == "single") { update(prefs.copy(zoomLockPan = "single")) }
-                Chip(stringResource(R.string.pan_two), prefs.zoomLockPan == "double") { update(prefs.copy(zoomLockPan = "double")) }
-                Chip(stringResource(R.string.pan_none), prefs.zoomLockPan == "none") { update(prefs.copy(zoomLockPan = "none")) }
+            item(key = "explorer") {
+                ExplorerPreferencesSection(
+                    prefs = prefs,
+                    editor = editor,
+                    onUpdateHome = ::updateHome,
+                    onNameColor = { namingColor = it },
+                )
             }
-            CheckRow(stringResource(R.string.pref_detect_shapes), prefs.detectShapes) { update(prefs.copy(detectShapes = it)) }
-            FieldLabel(stringResource(R.string.pref_pen_button_hold))
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                penButtonOptions.forEach { (id, label) ->
-                    Chip(stringResource(label), prefs.penButtonTool == id) { update(prefs.copy(penButtonTool = id)) }
-                }
+            item(key = "pdf_export") {
+                PdfExportPreferencesSection(prefs = prefs, onUpdateHome = ::updateHome)
             }
-            if (prefs.penButtonTool == "eraser" || prefs.penButtonTool == "pan") {
-                CheckRow(stringResource(R.string.pref_pen_button_hover), prefs.penButtonHover) {
-                    update(prefs.copy(penButtonHover = it))
-                }
+            item(key = "performance") {
+                PerformancePreferencesSection(prefs = prefs, onUpdate = ::update)
             }
-            val tapOptions = tapGestureOptions.map { (id, res) -> id to stringResource(res) }
-            FieldLabel(stringResource(R.string.pref_two_finger_tap))
-            OptionDropdown(tapOptions, prefs.twoFingerTap) { update(prefs.copy(twoFingerTap = it)) }
-            FieldLabel(stringResource(R.string.pref_three_finger_tap))
-            OptionDropdown(tapOptions, prefs.threeFingerTap) { update(prefs.copy(threeFingerTap = it)) }
-            FieldLabel(stringResource(R.string.pref_stylus_double_tap))
-            OptionDropdown(tapOptions, prefs.stylusDoubleTap) { update(prefs.copy(stylusDoubleTap = it)) }
-            FieldLabel(stringResource(R.string.pref_stylus_button_tap))
-            OptionDropdown(tapOptions, prefs.stylusButtonTap) { update(prefs.copy(stylusButtonTap = it)) }
-            FieldLabel(stringResource(R.string.pref_redmi_buttons))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(stringResource(R.string.pen_button_1), color = palette.textDim.toComposeColor(), fontSize = 12.sp)
-                    OptionDropdown(tapOptions, prefs.stylusButton1Tap) { update(prefs.copy(stylusButton1Tap = it)) }
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(stringResource(R.string.pen_button_2), color = palette.textDim.toComposeColor(), fontSize = 12.sp)
-                    OptionDropdown(tapOptions, prefs.stylusButton2Tap) { update(prefs.copy(stylusButton2Tap = it)) }
-                }
-            }
-
-            HorizontalDivider(color = palette.border.toComposeColor())
-            SectionTitle(stringResource(R.string.pref_new_notes))
-            FieldLabel(stringResource(R.string.pref_filename_template))
-            Text(
-                stringResource(R.string.pref_filename_template_help),
-                color = palette.textDim.toComposeColor(),
-                fontSize = 12.sp,
-            )
-            OutlinedTextField(
-                value = prefs.newNoteNameTemplate,
-                onValueChange = { update(prefs.copy(newNoteNameTemplate = it)) },
-                singleLine = true,
-                placeholder = { Text(NameTemplate.DEFAULT) },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                modifier = Modifier.width(280.dp),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                NAME_TEMPLATE_PRESETS.forEach { t ->
-                    Chip(t, prefs.newNoteNameTemplate == t) { update(prefs.copy(newNoteNameTemplate = t)) }
-                }
-            }
-            Text(
-                stringResource(R.string.pref_next_note_named, "${editor.newNoteStem(emptySet())}.xnote"),
-                color = palette.textDim.toComposeColor(),
-                fontSize = 12.sp,
-            )
-
-            HorizontalDivider(color = palette.border.toComposeColor())
-            SectionTitle(stringResource(R.string.pref_page))
-            FieldLabel(stringResource(R.string.pref_default_page_size))
-            SizeDropdown(prefs.defaultPageSize) { update(prefs.copy(defaultPageSize = it)) }
-            if (prefs.defaultPageSize == PageSize.CUSTOM) {
-                // A custom page is taken as typed, so the orientation chips have nothing to say
-                // about it and are left out rather than shown doing nothing.
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MillimetreField(stringResource(R.string.width_mm), prefs.customPageWidthMm) {
-                        update(prefs.copy(customPageWidthMm = it))
-                    }
-                    MillimetreField(stringResource(R.string.height_mm), prefs.customPageHeightMm) {
-                        update(prefs.copy(customPageHeightMm = it))
-                    }
-                }
-            } else {
-                FieldLabel(stringResource(R.string.pref_orientation))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Chip(stringResource(R.string.orientation_portrait), prefs.defaultPageOrientation == Orientation.PORTRAIT) {
-                        update(prefs.copy(defaultPageOrientation = Orientation.PORTRAIT))
-                    }
-                    Chip(stringResource(R.string.orientation_landscape), prefs.defaultPageOrientation == Orientation.LANDSCAPE) {
-                        update(prefs.copy(defaultPageOrientation = Orientation.LANDSCAPE))
-                    }
-                }
-            }
-            CheckRow(stringResource(R.string.pref_hide_page_borders), prefs.hidePageBorders) {
-                update(prefs.copy(hidePageBorders = it))
-            }
-            FieldLabel(stringResource(R.string.pref_side_margin_px, prefs.sideMargin.toInt()))
-            Slider(
-                value = prefs.sideMargin.toFloat(),
-                onValueChange = { update(prefs.copy(sideMargin = it.toDouble())) },
-                valueRange = 0f..64f,
-                modifier = Modifier.width(280.dp),
-            )
-            FieldLabel(stringResource(R.string.pref_page_colour))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                pageColorPresets.forEach { c ->
-                    ColorDot(c.toComposeColor(), prefs.pageColor == c) { update(prefs.copy(pageColor = c)) }
-                }
-                ColorPickerDot(
-                    prefs.pageColor,
-                    custom = prefs.pageColor != null && prefs.pageColor !in pageColorPresets,
-                    onPick = { update(prefs.copy(pageColor = it)) },
-                    dismissOnPick = false,
-                ) { onDismiss, onPick -> PageColorGridPopup(prefs.pageColor, onDismiss, onPick) }
-            }
-            CheckRow(stringResource(R.string.pref_page_colour_follows_theme), prefs.pageColor == null) {
-                update(prefs.copy(pageColor = if (it) null else pageColorPresets.first()))
-            }
-
-            HorizontalDivider(color = palette.border.toComposeColor())
-            SectionTitle(stringResource(R.string.pref_home_explorer))
-            Text(
-                stringResource(R.string.pref_home_explorer_help),
-                color = palette.textDim.toComposeColor(),
-                fontSize = 12.sp,
-            )
-            FieldLabel(stringResource(R.string.pref_default_layout))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ExplorerLayout.entries.forEach { l -> Chip(stringResource(l.labelRes), editor.explorerView.layout == l) { editor.setDefaultLayout(l) } }
-            }
-            FieldLabel(stringResource(R.string.pref_switcher_layouts))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ExplorerLayout.entries.forEach { l ->
-                    val on = l in prefs.switcherLayouts
-                    ExplorerChip(stringResource(l.labelRes), on, icon = if (on) XnotesIcons.check else XnotesIcons.plus) {
-                        val next = if (on) prefs.switcherLayouts - l else prefs.switcherLayouts + l
-                        if (next.isNotEmpty()) updateHome(prefs.copy(switcherLayouts = ExplorerLayout.entries.filter { it in next }))
-                    }
-                }
-            }
-            FieldLabel(stringResource(R.string.pref_sidebar_sections))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                @Composable
-                fun section(label: String, on: Boolean, flip: () -> Preferences) =
-                    ExplorerChip(label, on, icon = if (on) XnotesIcons.check else XnotesIcons.plus) { updateHome(flip()) }
-                section(stringResource(R.string.recent), prefs.sidebarRecent) { prefs.copy(sidebarRecent = !prefs.sidebarRecent) }
-                section(stringResource(R.string.pinned), prefs.sidebarPinned) { prefs.copy(sidebarPinned = !prefs.sidebarPinned) }
-                section(stringResource(R.string.toolbar_colours), prefs.sidebarColours) { prefs.copy(sidebarColours = !prefs.sidebarColours) }
-                if (prefs.trashDays != 0) section(stringResource(R.string.trash), prefs.sidebarTrash) { prefs.copy(sidebarTrash = !prefs.sidebarTrash) }
-            }
-            FieldLabel(stringResource(R.string.pref_home_opens_to))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Chip(stringResource(R.string.top_folder), prefs.homeOpensTo == "top") { updateHome(prefs.copy(homeOpensTo = "top")) }
-                Chip(stringResource(R.string.last_folder), prefs.homeOpensTo == "last") { updateHome(prefs.copy(homeOpensTo = "last")) }
-                Chip(stringResource(R.string.recent_and_pinned), prefs.homeOpensTo == "shelves") { updateHome(prefs.copy(homeOpensTo = "shelves")) }
-            }
-            val words = rememberExplorerWords()
-            FieldLabel(stringResource(R.string.pref_dates))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Chip(words.daysAgo(2), prefs.dateStyle == "relative") { updateHome(prefs.copy(dateStyle = "relative")) }
-                Chip("${words.shortWeekday(java.time.DayOfWeek.WEDNESDAY)} ${clockText(words, java.time.LocalTime.of(17, 30), true)}", prefs.dateStyle == "day") { updateHome(prefs.copy(dateStyle = "day")) }
-                Chip(words.dayMonthYear(16, java.time.Month.SEPTEMBER, 2026), prefs.dateStyle == "date") { updateHome(prefs.copy(dateStyle = "date")) }
-            }
-            FieldLabel(stringResource(R.string.pref_tapping_file))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Chip(stringResource(R.string.tap_opens), !prefs.tapPreviews) { updateHome(prefs.copy(tapPreviews = false)) }
-                Chip(stringResource(R.string.tap_previews), prefs.tapPreviews) { updateHome(prefs.copy(tapPreviews = true)) }
-            }
-            FieldLabel(stringResource(R.string.pref_keep_deleted))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Chip(stringResource(R.string.off), prefs.trashDays == 0) { updateHome(prefs.copy(trashDays = 0)) }
-                Chip(pluralStringResource(R.plurals.days_count, 7, 7), prefs.trashDays == 7) { updateHome(prefs.copy(trashDays = 7)) }
-                Chip(pluralStringResource(R.plurals.days_count, 30, 30), prefs.trashDays == 30) { updateHome(prefs.copy(trashDays = 30)) }
-                Chip(stringResource(R.string.until_emptied), prefs.trashDays == Preferences.TRASH_FOREVER) { updateHome(prefs.copy(trashDays = Preferences.TRASH_FOREVER)) }
-            }
-            if (editor.browseRoot != null) {
-                FieldLabel(stringResource(R.string.pref_colour_names))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    editor.colorNames.entries.sortedBy { it.value.lowercase() }.forEach { (c, name) ->
-                        Row(
-                            Modifier.clip(MaterialTheme.shapes.small).background(palette.surface.toComposeColor())
-                                .border(1.dp, palette.border.toComposeColor(), MaterialTheme.shapes.small)
-                                .clickable { namingColor = c }.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Box(Modifier.size(10.dp).clip(CircleShape).background(codeTint(c, palette)))
-                            Text(name, color = palette.text.toComposeColor(), fontSize = 14.sp, maxLines = 1)
-                        }
-                    }
-                    var picking by remember { mutableStateOf(false) }
-                    Box {
-                        ExplorerChip(stringResource(R.string.name_a_colour), false, icon = XnotesIcons.plus) { picking = true }
-                        DropdownMenu(expanded = picking, onDismissRequest = { picking = false }) {
-                            ColorCodeMenuContent { c -> picking = false; if (c != null) namingColor = c }
-                        }
-                    }
-                }
-            }
-            CheckRow(stringResource(R.string.pref_per_folder_views), prefs.perFolderViews) { updateHome(prefs.copy(perFolderViews = it)) }
-            CheckRow(stringResource(R.string.pref_show_folder_counts), prefs.showFolderCounts) { updateHome(prefs.copy(showFolderCounts = it)) }
-            CheckRow(stringResource(R.string.pref_show_extensions), prefs.showExtensions) { updateHome(prefs.copy(showExtensions = it)) }
-
-            HorizontalDivider(color = palette.border.toComposeColor())
-            SectionTitle(stringResource(R.string.pref_pdf_export))
-            CheckRow(stringResource(R.string.pref_pdf_heading_bookmarks), prefs.pdfHeadingBookmarks) {
-                updateHome(prefs.copy(pdfHeadingBookmarks = it))
-            }
-
-            HorizontalDivider(color = palette.border.toComposeColor())
-            SectionTitle(stringResource(R.string.pref_performance))
-            FieldLabel(stringResource(R.string.pref_max_cache_px, prefs.maxCacheResolution))
-            Slider(
-                value = prefs.maxCacheResolution.toFloat(),
-                onValueChange = { update(prefs.copy(maxCacheResolution = Math.round(it))) },
-                valueRange = 1024f..4096f,
-                steps = 5,
-                modifier = Modifier.width(280.dp),
-            )
-            Text(
-                stringResource(R.string.pref_cache_help),
-                color = palette.textDim.toComposeColor(),
-                fontSize = 12.sp,
-            )
-            CheckRow(stringResource(R.string.pref_disable_front_buffering), prefs.disableFrontBuffering) {
-                update(prefs.copy(disableFrontBuffering = it))
-            }
-            Text(
-                stringResource(R.string.pref_front_buffering_help),
-                color = palette.textDim.toComposeColor(),
-                fontSize = 12.sp,
-            )
-
             if (editor.treeSitterAvailable) {
-                HorizontalDivider(color = palette.border.toComposeColor())
-                SectionTitle(stringResource(R.string.pref_code_highlighting))
-
-                val langOptions = editor.scmLanguages().map { it to it }
-                FieldLabel(stringResource(R.string.pref_default_code_language))
-                Text(
-                    stringResource(R.string.pref_code_language_help),
-                    color = palette.textDim.toComposeColor(),
-                    fontSize = 12.sp,
-                )
-                OptionDropdown(listOf("plain" to stringResource(R.string.code_plain)) + langOptions, prefs.defaultCodeLanguage) {
-                    update(prefs.copy(defaultCodeLanguage = it))
-                }
-
-                FieldLabel(stringResource(R.string.pref_code_theme))
-                Text(
-                    stringResource(R.string.pref_code_theme_help),
-                    color = palette.textDim.toComposeColor(),
-                    fontSize = 12.sp,
-                )
-                if (editor.hasCustomCodeTheme) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            prefs.codeThemeName ?: stringResource(R.string.custom_theme),
-                            color = palette.text.toComposeColor(),
-                            fontSize = 13.sp,
-                        )
-                        TextButton(onClick = { editor.resetCodeTheme() }) { Text(stringResource(R.string.reset), fontSize = 13.sp) }
-                    }
-                }
-                TextButton(onClick = { onImportCodeTheme() }) { Text(stringResource(R.string.import_theme), fontSize = 13.sp) }
-            }
-
-            HorizontalDivider(color = palette.border.toComposeColor())
-            SectionTitle(stringResource(R.string.pref_fonts))
-            Text(
-                stringResource(R.string.pref_fonts_help),
-                color = palette.textDim.toComposeColor(),
-                fontSize = 12.sp,
-            )
-            TextButton(onClick = { onImportFont() }) { Text(stringResource(R.string.import_font), fontSize = 13.sp) }
-            for (font in editor.customFonts) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        font.label,
-                        color = palette.text.toComposeColor(),
-                        fontSize = 13.sp,
-                        style = TextStyle(fontFamily = font.face.toComposeFamily()),
+                item(key = "code_highlighting") {
+                    CodeHighlightingPreferencesSection(
+                        prefs = prefs,
+                        editor = editor,
+                        onUpdate = ::update,
+                        onImportCodeTheme = onImportCodeTheme,
                     )
-                    if (font.mono) {
-                        Text(stringResource(R.string.mono_suffix), color = palette.accent.toComposeColor(), fontSize = 11.sp)
-                    }
-                    TextButton(onClick = { editor.removeCustomFont(font.face) }) { Text(stringResource(R.string.remove), fontSize = 12.sp) }
                 }
             }
-
-            HorizontalDivider(color = palette.border.toComposeColor())
-            SectionTitle(stringResource(R.string.pref_toolbar))
-            // The look, like the swatch count below, is one setting for both bars.
-            val look = prefs.toolbarLook
-            FieldLabel(stringResource(R.string.pref_toolbar_style))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Chip(stringResource(R.string.toolbar_docked), !look.floating) { updateHome(prefs.copy(toolbarLook = look.copy(floating = false))) }
-                Chip(stringResource(R.string.toolbar_floating), look.floating) { updateHome(prefs.copy(toolbarLook = look.copy(floating = true))) }
+            item(key = "fonts") {
+                FontsPreferencesSection(
+                    customFonts = editor.customFonts,
+                    onImportFont = onImportFont,
+                    onRemoveFont = { editor.removeCustomFont(it) },
+                )
             }
-            FieldLabel(stringResource(R.string.pref_toolbar_position))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                for ((position, label) in listOf(
-                    ToolbarPosition.TOP to R.string.edge_top,
-                    ToolbarPosition.BOTTOM to R.string.edge_bottom,
-                    ToolbarPosition.LEFT to R.string.edge_left,
-                    ToolbarPosition.RIGHT to R.string.edge_right,
-                )) {
-                    Chip(stringResource(label), look.position == position) { updateHome(prefs.copy(toolbarLook = look.copy(position = position))) }
-                }
-            }
-            FieldLabel(stringResource(R.string.pref_toolbar_size))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                for ((size, label) in listOf(
-                    ToolbarSize.COMPACT to R.string.toolbar_size_compact,
-                    ToolbarSize.REGULAR to R.string.toolbar_size_regular,
-                    ToolbarSize.COMFORTABLE to R.string.toolbar_size_comfortable,
-                )) {
-                    Chip(stringResource(label), look.size == size) { updateHome(prefs.copy(toolbarLook = look.copy(size = size))) }
-                }
-            }
-            FieldLabel(stringResource(R.string.pref_toolbar_colours_n, editor.toolbarColorCount))
-            Slider(
-                value = editor.toolbarColorCount.toFloat(),
-                onValueChange = { editor.applyToolbarColorCount(Math.round(it)) },
-                valueRange = 1f..InkPalette.MAX_SWATCHES.toFloat(),
-                steps = InkPalette.MAX_SWATCHES - 2,
-                modifier = Modifier.width(280.dp),
-            )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Chip("xnote", selected = !canvasTab) { showTab(false) }
-                Chip("xcanvas", selected = canvasTab) { showTab(true) }
-                Spacer(Modifier.weight(1f))
-                TextButton(
-                    onClick = {
-                        applyEdited(if (canvasTab) ToolbarLayout.CANVAS_DEFAULT else ToolbarLayout.DEFAULT)
+            item(key = "toolbar") {
+                ToolbarPreferencesSection(
+                    prefs = prefs,
+                    editor = editor,
+                    canvasTab = canvasTab,
+                    onSelectCanvasTab = ::showTab,
+                    onUpdateHome = ::updateHome,
+                    onApplyEdited = ::applyEdited,
+                    dragItem = dragItem,
+                    dropTarget = dropTarget,
+                    dragSection = dragSection,
+                    sectionDropTarget = sectionDropTarget,
+                    chipBounds = chipBounds,
+                    sectionBounds = sectionBounds,
+                    sectionGrabBounds = sectionGrabBounds,
+                    onClearDrag = {
+                        dragItem = null
+                        dragSection = null
+                        dropTarget = null
+                        sectionDropTarget = null
                     },
-                ) { Text(stringResource(R.string.reset), fontSize = 13.sp) }
+                    onStartItemDrag = { item, local ->
+                        dragItem = item
+                        dragGrab = local
+                        dragFinger = (chipBounds[item]?.topLeft ?: Offset.Zero) + local
+                        retarget()
+                    },
+                    onMoveItemDrag = { delta ->
+                        dragFinger += delta
+                        retarget()
+                    },
+                    onStartSectionDrag = { sec, local ->
+                        dragSection = sec
+                        val grab = sectionGrabBounds[sec]?.topLeft ?: sectionBounds[sec]?.topLeft ?: Offset.Zero
+                        val card = sectionBounds[sec]?.topLeft ?: Offset.Zero
+                        dragFinger = grab + local
+                        dragGrab = dragFinger - card
+                        retargetSection()
+                    },
+                    onMoveSectionDrag = { delta ->
+                        dragFinger += delta
+                        retargetSection()
+                    },
+                )
             }
-            Text(
-                stringResource(R.string.pref_toolbar_help),
-                color = palette.textDim.toComposeColor(),
-                fontSize = 12.sp,
-            )
-            ToolbarCustomizerBody(
-                layout = layout,
-                dragItem = dragItem,
-                dropTarget = dropTarget,
-                dragSection = dragSection,
-                sectionDropTarget = sectionDropTarget,
-                chipBounds = chipBounds,
-                sectionBounds = sectionBounds,
-                sectionGrabBounds = sectionGrabBounds,
-                onToggle = { s, i -> applyEdited(editedLayout().toggleVisible(s, i)) },
-                onDelete = { s -> applyEdited(editedLayout().removeSection(s)) },
-                onAdd = { applyEdited(editedLayout().addSection()) },
-                onDragStart = { item, local ->
-                    dragItem = item
-                    dragGrab = local
-                    dragFinger = (chipBounds[item]?.topLeft ?: Offset.Zero) + local
-                    retarget()
-                },
-                onDrag = { delta -> dragFinger += delta; retarget() },
-                onDrop = {
-                    val target = dropTarget
-                    val moving = dragItem
-                    if (target != null && moving != null) {
-                        val cur = editedLayout()
-                        val fSec = cur.sections.indexOfFirst { s -> s.entries.any { it.item == moving } }
-                        val fIdx = if (fSec >= 0) cur.sections[fSec].entries.indexOfFirst { it.item == moving } else -1
-                        if (fSec >= 0 && fIdx >= 0) {
-                            applyEdited(cur.moveItem(fSec, fIdx, target.first, target.second))
-                        }
-                    }
-                    dragItem = null
-                    dropTarget = null
-                },
-                onCancel = {
-                    dragItem = null
-                    dropTarget = null
-                },
-                onSectionDragStart = { sec, local ->
-                    dragSection = sec
-                    val grab = sectionGrabBounds[sec]?.topLeft ?: sectionBounds[sec]?.topLeft ?: Offset.Zero
-                    val card = sectionBounds[sec]?.topLeft ?: Offset.Zero
-                    dragFinger = grab + local
-                    dragGrab = dragFinger - card
-                    retargetSection()
-                },
-                onSectionDrag = { delta -> dragFinger += delta; retargetSection() },
-                onSectionDrop = {
-                    val from = dragSection
-                    val insertAt = sectionDropTarget
-                    if (from != null && insertAt != null) {
-                        val cur = editedLayout()
-                        val to = (if (insertAt > from) insertAt - 1 else insertAt).coerceIn(0, cur.sections.lastIndex)
-                        if (to != from) applyEdited(cur.moveSection(from, to))
-                    }
-                    dragSection = null
-                    sectionDropTarget = null
-                },
-                onSectionCancel = {
-                    dragSection = null
-                    sectionDropTarget = null
-                },
-            )
-            Spacer(Modifier.size(8.dp))
         }
     }
         // The dragged chip/section's floating copy: a pane-root sibling so the scroll never clips it.
@@ -705,7 +353,7 @@ fun PreferencesPane(
                 else -> 0f
             }
             if (delta != 0f) {
-                scrollState.scrollBy(delta)
+                lazyListState.scrollBy(delta)
                 if (dragItem != null) retarget() else retargetSection()
             }
             delay(16L)
@@ -714,18 +362,18 @@ fun PreferencesPane(
 }
 
 @Composable
-private fun SectionTitle(text: String) {
+internal fun SectionTitle(text: String) {
     Text(text, color = LocalPalette.current.text.toComposeColor(), fontWeight = FontWeight.Bold, fontSize = 15.sp)
 }
 
 @Composable
-private fun FieldLabel(text: String) {
+internal fun FieldLabel(text: String) {
     Text(text, color = LocalPalette.current.accent.toComposeColor(), fontSize = 13.sp)
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CustomMaterialControls(prefs: Preferences, update: (Preferences) -> Unit) {
+internal fun CustomMaterialControls(prefs: Preferences, update: (Preferences) -> Unit) {
     val palette = LocalPalette.current
     val styles = listOf(
         MaterialStyle.TONAL_SPOT to R.string.material_style_soft,
@@ -768,7 +416,7 @@ private fun CustomMaterialControls(prefs: Preferences, update: (Preferences) -> 
 }
 
 @Composable
-private fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
+internal fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
     val palette = LocalPalette.current
     Box(
         Modifier
@@ -889,7 +537,7 @@ internal fun PageColorGridPopup(initial: Rgba?, onDismiss: () -> Unit, onPick: (
 }
 
 @Composable
-private fun CheckRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun CheckRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { onChange(!checked) }) {
         Checkbox(checked = checked, onCheckedChange = onChange)
         Spacer(Modifier.width(2.dp))
@@ -902,7 +550,7 @@ private fun CheckRow(label: String, checked: Boolean, onChange: (Boolean) -> Uni
  * cleared and retyped; only a value that parses inside the settable range reaches the preference.
  */
 @Composable
-private fun MillimetreField(label: String, value: Double, onChange: (Double) -> Unit) {
+internal fun MillimetreField(label: String, value: Double, onChange: (Double) -> Unit) {
     var text by remember { mutableStateOf(formatMm(value)) }
     // Adopt an outside change (Reset to defaults) without ever rewriting what is being typed.
     LaunchedEffect(value) { if (text.trim().toDoubleOrNull() != value) text = formatMm(value) }
@@ -926,7 +574,7 @@ private fun formatMm(v: Double): String =
     if (v == Math.floor(v) && !v.isInfinite()) v.toInt().toString() else v.toString()
 
 @Composable
-private fun SizeDropdown(size: PageSize, onSelect: (PageSize) -> Unit) {
+internal fun SizeDropdown(size: PageSize, onSelect: (PageSize) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     val palette = LocalPalette.current
     Box {
@@ -948,7 +596,7 @@ private fun SizeDropdown(size: PageSize, onSelect: (PageSize) -> Unit) {
 }
 
 @Composable
-private fun OptionDropdown(options: List<Pair<String, String>>, selectedId: String, onSelect: (String) -> Unit) {
+internal fun OptionDropdown(options: List<Pair<String, String>>, selectedId: String, onSelect: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     val palette = LocalPalette.current
     val label = options.firstOrNull { it.first == selectedId }?.second ?: options.first().second

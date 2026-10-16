@@ -518,5 +518,118 @@ class SettingsTest {
         assertEquals(shape, back)
         assertEquals("uml_aggregation_elbow", back.connector!!.key)
     }
+
+    @Test fun appLanguageDefaultsToSystemAndUnwritten() {
+        val p = Preferences()
+        assertEquals("system", p.appLanguage)
+        assertFalse(p.toJson().has("app_language"))
+        assertEquals("system", Preferences.fromJson(JSONObject()).appLanguage)
+    }
+
+    @Test fun appLanguageRoundTripsSupportedLocales() {
+        for (lang in listOf("en", "it", "zh-Hans")) {
+            val p = Preferences(appLanguage = lang)
+            assertEquals(lang, Preferences.fromJson(p.toJson()).appLanguage)
+        }
+    }
+
+    @Test fun appLanguageIgnoresInvalidValues() {
+        val o = JSONObject().put("app_language", "invalid_locale")
+        assertEquals("system", Preferences.fromJson(o).appLanguage)
+    }
+
+    @Test fun englishStringsResourceFileExists() {
+        // When device system language is Italian (values-it), Android's AssetManager falls back
+        // to system locales if an exact language qualifier folder (values-en) is missing.
+        val candidates = listOf(
+            java.io.File("src/main/res/values-en/strings.xml"),
+            java.io.File("app/src/main/res/values-en/strings.xml"),
+        )
+        val file = candidates.firstOrNull { it.exists() }
+        assertTrue("values-en/strings.xml must exist to prevent fallback to system locale", file != null && file.exists())
+        assertTrue("values-en/strings.xml must not be empty", file!!.length() > 0)
+    }
+
+    @Test fun mainActivityProvidesActivityResultRegistryOwner() {
+        // Overriding LocalContext with createConfigurationContext strips ActivityResultRegistryOwner.
+        // MainActivity must explicitly provide LocalActivityResultRegistryOwner so EditorScreen's
+        // rememberLauncherForActivityResult does not throw at runtime.
+        val candidates = listOf(
+            java.io.File("src/main/java/com/xnotes/MainActivity.kt"),
+            java.io.File("app/src/main/java/com/xnotes/MainActivity.kt"),
+        )
+        val file = candidates.firstOrNull { it.exists() }
+        assertTrue("MainActivity.kt must exist", file != null && file.exists())
+        val content = file!!.readText()
+        assertTrue(
+            "CompositionLocalProvider must provide LocalActivityResultRegistryOwner alongside LocalContext",
+            content.contains("LocalActivityResultRegistryOwner provides"),
+        )
+    }
+
+    @Test fun sidebarFolderTreePreferencesRoundTrip() {
+        val p = Preferences(sidebarFolderTree = false, sidebarTreeFiles = true)
+        val json = p.toJson()
+        assertTrue(json.has("sidebar_folder_tree"))
+        assertFalse(json.getBoolean("sidebar_folder_tree"))
+        assertTrue(json.has("sidebar_tree_files"))
+        assertTrue(json.getBoolean("sidebar_tree_files"))
+
+        val back = Preferences.fromJson(json)
+        assertFalse(back.sidebarFolderTree)
+        assertTrue(back.sidebarTreeFiles)
+    }
+
+    @Test fun sidebarFolderTreePreferencesDefaults() {
+        val p = Preferences()
+        assertTrue(p.sidebarFolderTree)
+        assertFalse(p.sidebarTreeFiles)
+
+        val fromEmpty = Preferences.fromJson(JSONObject())
+        assertTrue(fromEmpty.sidebarFolderTree)
+        assertFalse(fromEmpty.sidebarTreeFiles)
+
+        val settingsDefaults = Settings.fromJson(JSONObject())
+        assertTrue(settingsDefaults.prefs.sidebarFolderTree)
+        assertFalse(settingsDefaults.prefs.sidebarTreeFiles)
+    }
+
+    @Test fun sidebarFolderTreeSettingsRoundTrip() {
+        val original = Settings(
+            prefs = Preferences(
+                sidebarFolderTree = false,
+                sidebarTreeFiles = true,
+            ),
+        )
+        val back = Settings.fromJson(original.toJson())
+        assertFalse(back.prefs.sidebarFolderTree)
+        assertTrue(back.prefs.sidebarTreeFiles)
+    }
+
+    @Test fun sidebarFolderTreePreferencesSafetyChecks() {
+        // Corrupted or invalid non-boolean types safely fallback to defaults
+        val corrupted = JSONObject()
+            .put("sidebar_folder_tree", "not_a_boolean")
+            .put("sidebar_tree_files", 12345)
+        val prefsCorrupted = Preferences.fromJson(corrupted)
+        assertTrue(prefsCorrupted.sidebarFolderTree)
+        assertFalse(prefsCorrupted.sidebarTreeFiles)
+
+        // Null fields safely fallback to defaults without throwing
+        val nullFields = JSONObject()
+            .put("sidebar_folder_tree", JSONObject.NULL)
+            .put("sidebar_tree_files", JSONObject.NULL)
+        val prefsNull = Preferences.fromJson(nullFields)
+        assertTrue(prefsNull.sidebarFolderTree)
+        assertFalse(prefsNull.sidebarTreeFiles)
+
+        // Hierarchy safety check: DocKeys.within prevents circular folder moves
+        val parentDocId = "root/notes/projects"
+        assertTrue("Moving a folder into itself must be blocked", com.xnotes.core.util.DocKeys.within(parentDocId, parentDocId))
+        assertTrue("Moving a folder into its child subfolder must be blocked", com.xnotes.core.util.DocKeys.within("$parentDocId/subfolder", parentDocId))
+        assertFalse("Moving a folder into a sibling must be allowed", com.xnotes.core.util.DocKeys.within("root/notes/other", parentDocId))
+        assertFalse("Prefix collision with different folder name must be allowed", com.xnotes.core.util.DocKeys.within("root/notes/projects_archive", parentDocId))
+    }
 }
+
 

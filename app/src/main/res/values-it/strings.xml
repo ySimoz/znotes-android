@@ -1,0 +1,1004 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">xnotes</string>
+
+    <!-- Tools and toolbar items -->
+    <string name="tool_pen">Penna</string>
+    <string name="tool_dashed">Tratteggiata</string>
+    <string name="tool_calligraphy">Calligrafia</string>
+    <string name="tool_speed">Sensibile alla velocità</string>
+    <string name="tool_taper">Affusolata</string>
+    <string name="tool_highlighter">Evidenziatore</string>
+    <string name="tool_eraser">Gomma</string>
+    <string name="tool_pan">Sposta</string>
+    <string name="tool_select">Seleziona</string>
+    <string name="tool_lasso">Lazo</string>
+    <string name="tool_screenshot">Cattura schermata</string>
+    <string name="tool_wand">Inchiostro a scomparsa</string>
+    <string name="tool_shape">Forma</string>
+    <string name="tool_ruler">Righello</string>
+    <string name="tool_text">Testo</string>
+    <string name="tool_text_box">Casella di testo</string>
+    <string name="tool_markup">Evidenziazione e annotazione PDF</string>
+    <string name="markup_highlight">Evidenzia</string>
+    <string name="markup_squiggly">Ondulata</string>
+    <string name="markup_colour">Colore</string>
+    <string name="markup_kind">Tipo</string>
+    <string name="markup_note">Nota</string>
+    <string name="markup_note_hint">Scrivi una nota</string>
+    <string name="open_link">Apri link</string>
+    <string name="tool_image">Immagine</string>
+    <string name="toolbar_home">Inizio</string>
+    <string name="toolbar_title">Titolo</string>
+    <string name="toolbar_sidebar">Barra laterale</string>
+    <string name="undo">Annulla</string>
+    <string name="redo">Ripeti</string>
+    <string name="toolbar_page_nav">Navigazione pagine</string>
+    <string name="toolbar_styles">Stili</string>
+    <string name="toolbar_margins">Margini</string>
+    <string name="toolbar_view">Vista</string>
+    <string name="toolbar_zoom">Zoom</string>
+    <string name="toolbar_fit">Adatta</string>
+    <string name="toolbar_zoom_lock">Blocca zoom</string>
+    <string name="toolbar_fullscreen">Schermo intero</string>
+    <string name="toolbar_colours">Colori</string>
+    <string name="toolbar_waypoints">Viste salvate</string>
+    <string name="toolbar_minimap">Mini mappa</string>
+    <string name="edge_left">Sinistra</string>
+    <string name="edge_right">Destra</string>
+    <string name="edge_top">Superiore</string>
+    <string name="edge_bottom">Inferiore</string>
+    <string name="page_size_custom">Personalizzata</string>
+    <string name="page_size_letter">Letter</string>
+    <string name="page_size_legal">Legal</string>
+    <string name="page_size_slide_16_9">Diapositiva 16:9</string>
+    <string name="page_size_slide_4_3">Diapositiva 4:3</string>
+    <string name="font_sans">Senza grazie (Sans)</string>
+    <string name="font_serif">Con grazie (Serif)</string>
+    <string name="font_mono">A spaziatura fissa (Mono)</string>
+    <string name="font_hand">Manoscritto</string>
+
+    <!-- Tool, style, margin, view and zoom popups -->
+    <string name="caption_colour">Colore</string>
+    <string name="default_choice">Predefinito</string>
+    <string name="caption_pressure">Pressione</string>
+    <string name="caption_sensitivity">Sensibilità</string>
+    <string name="caption_multiplier">Moltiplicatore</string>
+    <string name="caption_speed">Velocità</string>
+    <string name="caption_tip_width">Percentuale larghezza punta</string>
+    <string name="caption_width">Spessore</string>
+    <string name="caption_scale">Scala</string>
+    <string name="caption_dash">Tratto</string>
+    <string name="caption_gap">Spazio</string>
+    <string name="caption_intensity">Intensità</string>
+    <string name="caption_straight_line">Linea retta</string>
+    <string name="caption_inverse">Inverti</string>
+    <string name="caption_neon">Fluo (Neon)</string>
+    <string name="title_styles">Stili</string>
+    <string name="all_pages">Tutte le pagine</string>
+    <string name="current_page">Pagina corrente</string>
+    <string name="caption_page_colour">Colore pagina</string>
+    <string name="caption_pattern">Trama</string>
+    <string name="none">Nessuno</string>
+    <string name="pattern_lines">Righe</string>
+    <string name="pattern_dots">Punti</string>
+    <string name="pattern_grid">Griglia</string>
+    <string name="caption_pattern_colour">Colore trama</string>
+    <string name="caption_template">Modello</string>
+    <string name="caption_accent_colour">Colore di accento</string>
+    <string name="customize">Personalizza</string>
+    <string name="back_customize">‹  Personalizza</string>
+    <string name="import_template">Importa</string>
+    <string name="remove_template">Rimuovi dalla raccolta</string>
+    <string name="keep_template">Aggiungi alla raccolta</string>
+    <string name="template_imported">Modello "%1$s" importato.</string>
+    <string name="err_import_template">Impossibile importare il modello: %1$s</string>
+    <string name="template_too_large">è più grande di 1 MiB</string>
+    <string name="default_for_new_notes">Predefinito per nuove note</string>
+    <string name="reset">Reimposta</string>
+    <string name="title_margins">Margini</string>
+    <string name="title_view">Vista</string>
+    <string name="caption_viewing_mode">Modalità di visualizzazione</string>
+    <string name="view_single">Singola</string>
+    <string name="view_double">Doppia</string>
+    <string name="view_cover">Copertina</string>
+    <string name="caption_vertical_scrolling">Scorrimento verticale</string>
+    <string name="caption_pdf_filters">Filtri colore PDF</string>
+    <string name="filter_contrast">Contrasto</string>
+    <string name="filter_invert">Inverti</string>
+    <string name="filter_brightness">Luminosità</string>
+    <string name="filter_sepia">Seppia</string>
+    <string name="filter_multiply">Moltiplica</string>
+    <string name="filter_screen">Scolora (Screen)</string>
+    <string name="caption_keep_images">Non filtrare le immagini</string>
+    <string name="caption_scrollbar">Barra di scorrimento</string>
+    <string name="default_for_all_notes">Predefinito per tutte le note</string>
+    <string name="off">Disattivato</string>
+    <string name="title_go_to_page">Vai alla pagina</string>
+    <string name="go">Vai</string>
+    <string name="title_zoom">Zoom</string>
+    <string name="caption_min_zoom">Zoom minimo</string>
+    <string name="caption_max_zoom">Zoom massimo</string>
+    <string name="title_eraser">Gomma</string>
+    <string name="eraser_stroke">Tratto</string>
+    <string name="eraser_area">Area</string>
+    <string name="caption_size">Dimensione</string>
+    <string name="caption_switch_back">Torna allo strumento precedente</string>
+    <string name="caption_erase_markups">Cancella annotazioni testo PDF</string>
+    <string name="caption_scribble_erase">Scarabocchia per cancellare</string>
+    <string name="title_select">Seleziona</string>
+    <string name="title_shape">Forma</string>
+    <string name="shape_line">Linea</string>
+    <string name="shape_arrow">Freccia</string>
+    <string name="shape_rectangle">Rettangolo</string>
+    <string name="shape_ellipse">Ellisse</string>
+    <string name="shape_circle">Cerchio</string>
+    <string name="shape_triangle">Triangolo</string>
+    <string name="shape_polygon">Poligono</string>
+    <string name="shape_polyline">Polilinea</string>
+    <string name="shape_curve">Curva</string>
+    <string name="shape_rounded_rect">Rettangolo arrotondato</string>
+    <string name="shape_square">Quadrato</string>
+    <string name="shape_capsule">Capsula</string>
+    <string name="shape_right_triangle">Triangolo rettangolo</string>
+    <string name="shape_diamond">Rombo</string>
+    <string name="shape_parallelogram">Parallelogramma</string>
+    <string name="shape_trapezoid">Trapezio</string>
+    <string name="shape_pentagon">Pentagono</string>
+    <string name="shape_hexagon">Esagono</string>
+    <string name="shape_octagon">Ottagono</string>
+    <string name="shape_star">Stella</string>
+    <string name="shape_cross">Croce</string>
+    <string name="shape_heart">Cuore</string>
+    <string name="shape_cloud">Nuvola</string>
+    <string name="shape_ring">Anello</string>
+    <string name="shape_pie">Fetta</string>
+    <string name="shape_arc">Arco</string>
+    <string name="shape_free_polygon">Poligono libero</string>
+    <string name="shape_page_flowchart">Diagramma di flusso</string>
+    <string name="shape_flow_process">Processo</string>
+    <string name="shape_flow_alt_process">Processo alternativo</string>
+    <string name="shape_flow_decision">Decisione</string>
+    <string name="shape_flow_data">Dati</string>
+    <string name="shape_flow_terminator">Terminatore</string>
+    <string name="shape_flow_preparation">Preparazione</string>
+    <string name="shape_flow_predefined">Processo predefinito</string>
+    <string name="shape_flow_internal_storage">Memoria interna</string>
+    <string name="shape_flow_document">Documento</string>
+    <string name="shape_flow_multidocument">Documenti multipli</string>
+    <string name="shape_flow_manual_input">Input manuale</string>
+    <string name="shape_flow_manual_operation">Operazione manuale</string>
+    <string name="shape_flow_connector">Connettore</string>
+    <string name="shape_flow_off_page">Connettore fuori pagina</string>
+    <string name="shape_flow_database">Database</string>
+    <string name="shape_flow_direct_access">Memoria ad accesso diretto</string>
+    <string name="shape_flow_display">Schermo</string>
+    <string name="shape_flow_delay">Ritardo</string>
+    <string name="shape_flow_stored_data">Dati memorizzati</string>
+    <string name="shape_flow_sort">Ordina</string>
+    <string name="shape_flow_merge">Unisci</string>
+    <string name="shape_flow_extract">Estrai</string>
+    <string name="shape_flow_summing">Giunzione di somma</string>
+    <string name="shape_flow_or">Or</string>
+    <string name="shape_page_arrows">Frecce e richiami</string>
+    <string name="shape_arrow_right">Freccia destra</string>
+    <string name="shape_arrow_left">Freccia sinistra</string>
+    <string name="shape_arrow_up">Freccia su</string>
+    <string name="shape_arrow_down">Freccia giù</string>
+    <string name="shape_arrow_left_right">Freccia bidirezionale orizzontale</string>
+    <string name="shape_arrow_up_down">Freccia bidirezionale verticale</string>
+    <string name="shape_arrow_quad">Freccia a quattro vie</string>
+    <string name="shape_arrow_bent">Freccia piegata</string>
+    <string name="shape_arrow_u_turn">Freccia a U</string>
+    <string name="shape_arrow_chevron">Cuspide (Chevron)</string>
+    <string name="shape_arrow_pentagon">Freccia pentagonale</string>
+    <string name="shape_arrow_notched">Freccia dentellata destra</string>
+    <string name="shape_arrow_curved_right">Freccia curva a destra</string>
+    <string name="shape_arrow_curved_left">Freccia curva a sinistra</string>
+    <string name="shape_arrow_circular">Freccia circolare</string>
+    <string name="shape_arrow_striped">Freccia a strisce destra</string>
+    <string name="shape_arrow_bent_up">Freccia piegata in su</string>
+    <string name="shape_arrow_left_up">Freccia sinistra-su</string>
+    <string name="shape_callout_rect">Fumetto rettangolare</string>
+    <string name="shape_callout_round">Fumetto arrotondato</string>
+    <string name="shape_callout_oval">Fumetto ovale</string>
+    <string name="shape_callout_thought">Nuvola di pensiero</string>
+    <string name="shape_callout_line">Richiamo con linea</string>
+    <string name="shape_burst">Esplosione</string>
+    <string name="shape_page_solids_math">3D e matematica</string>
+    <string name="shape_solid_cube">Cubo</string>
+    <string name="shape_solid_cylinder">Cilindro</string>
+    <string name="shape_solid_cone">Cono</string>
+    <string name="shape_solid_sphere">Sfera</string>
+    <string name="shape_solid_pyramid">Piramide</string>
+    <string name="shape_solid_tetrahedron">Tetraedro</string>
+    <string name="shape_solid_tri_prism">Prisma triangolare</string>
+    <string name="shape_solid_hex_prism">Prisma esagonale</string>
+    <string name="shape_solid_frustum">Tronco di cono</string>
+    <string name="shape_solid_hemisphere">Emisfero</string>
+    <string name="shape_math_axes_2d">Assi 2D</string>
+    <string name="shape_math_axes_3d">Assi 3D</string>
+    <string name="shape_math_number_line">Retta dei numeri</string>
+    <string name="shape_math_grid">Griglia cartesiana</string>
+    <string name="shape_math_angle">Angolo</string>
+    <string name="shape_math_right_angle">Simbolo angolo retto</string>
+    <string name="shape_math_curly_brace">Graffa</string>
+    <string name="shape_math_square_bracket">Quadra</string>
+    <string name="shape_math_round_bracket">Tonda</string>
+    <string name="shape_page_basic">Di base</string>
+    <string name="caption_fill_colour">Colore riempimento</string>
+    <string name="fill_match_outline">Come il contorno</string>
+    <string name="caption_head_start">Inizio</string>
+    <string name="caption_head_end">Fine</string>
+    <string name="head_none">Nessuna punta</string>
+    <string name="head_open">Freccia</string>
+    <string name="head_filled">Freccia piena</string>
+    <string name="head_hollow_triangle">Triangolo vuoto</string>
+    <string name="head_filled_diamond">Rombo pieno</string>
+    <string name="head_hollow_diamond">Rombo vuoto</string>
+    <string name="conn_page_connectors">Connettori</string>
+    <string name="conn_page_uml">UML</string>
+    <string name="conn_straight">Connettore dritto</string>
+    <string name="conn_straight_arrow">Connettore dritto con freccia</string>
+    <string name="conn_straight_both">Connettore dritto con doppia freccia</string>
+    <string name="conn_elbow">Connettore a gomito</string>
+    <string name="conn_elbow_arrow">Connettore a gomito con freccia</string>
+    <string name="conn_elbow_both">Connettore a gomito con doppia freccia</string>
+    <string name="conn_curved">Connettore curvo</string>
+    <string name="conn_curved_arrow">Connettore curvo con freccia</string>
+    <string name="conn_curved_both">Connettore curvo con doppia freccia</string>
+    <string name="conn_rounded">Connettore a gomito arrotondato</string>
+    <string name="conn_rounded_arrow">Connettore a gomito arrotondato con freccia</string>
+    <string name="conn_rounded_both">Connettore a gomito arrotondato con doppia freccia</string>
+    <string name="uml_association">Associazione</string>
+    <string name="uml_inheritance">Ereditarietà</string>
+    <string name="uml_realization">Realizzazione</string>
+    <string name="uml_dependency">Dipendenza</string>
+    <string name="uml_aggregation">Aggregazione</string>
+    <string name="uml_composition">Composizione</string>
+    <string name="uml_association_elbow">Associazione, a gomito</string>
+    <string name="uml_inheritance_elbow">Ereditarietà, a gomito</string>
+    <string name="uml_realization_elbow">Realizzazione, a gomito</string>
+    <string name="uml_dependency_elbow">Dipendenza, a gomito</string>
+    <string name="uml_aggregation_elbow">Aggregazione, a gomito</string>
+    <string name="uml_composition_elbow">Composizione, a gomito</string>
+    <string name="caption_points">Punte</string>
+    <string name="caption_sides">Lati</string>
+    <string name="caption_ticks">Tacche</string>
+    <string name="caption_cells">Celle</string>
+    <string name="count_fewer">Meno</string>
+    <string name="count_more">Più</string>
+    <string name="caption_fill">Riempimento</string>
+    <string name="caption_perfect">Regolare</string>
+    <string name="caption_opacity">Opacità</string>
+    <string name="caption_dashed">Tratteggiato</string>
+    <string name="caption_spacing_px">SPAZIATURA  %1$d px</string>
+    <string name="default_suffix">  (predefinito)</string>
+    <string name="caption_opacity_percent">Opacità  %1$d%%</string>
+    <string name="caption_value_percent">%1$s  %2$d%%</string>
+    <string name="caption_rotate_degrees">Ruota  %1$d°</string>
+    <string name="caption_glow_intensity">Intensità</string>
+
+    <!-- Toolbar -->
+    <string name="side_panel">Pannello laterale</string>
+    <string name="previous_page">Pagina precedente</string>
+    <string name="next_page">Pagina successiva</string>
+    <string name="zoom_out">Riduci zoom</string>
+    <string name="zoom_in">Ingrandisci zoom</string>
+    <string name="rename_note">Rinomina nota</string>
+    <string name="rename">Rinomina</string>
+    <string name="cancel">Annulla</string>
+    <string name="close_pane">Chiudi questo pannello</string>
+    <string name="paste_image">Incolla immagine</string>
+    <string name="insert_image_ellipsis">Inserisci immagine…</string>
+    <string name="stickers">Adesivi</string>
+    <string name="add_stickers">Aggiungi adesivi…</string>
+    <string name="no_stickers">Nessun adesivo.</string>
+    <string name="stickers_hint">Tocca per inserire, tieni premuto per rimuovere</string>
+    <string name="sticker">Adesivo</string>
+    <string name="fit_page">Adatta pagina intera</string>
+    <string name="fit_width">Adatta larghezza pagina</string>
+    <string name="fit_height">Adatta altezza pagina</string>
+    <string name="err_rename_note">Impossibile rinominare la nota.</string>
+    <string name="untitled">Senza titolo</string>
+    <string name="insert_image">Inserisci immagine</string>
+    <string name="fit_all">Adatta tutto</string>
+    <string name="gl_unavailable">GL non disponibile</string>
+    <string name="canvas_out_of_memory">Memoria esaurita, alcuni tratti sono nascosti</string>
+
+    <!-- Toolbar customizer -->
+    <string name="drop_here">rilascia qui</string>
+    <string name="delete_section">Elimina sezione</string>
+    <string name="add_section">Aggiungi sezione</string>
+
+    <!-- Preferences -->
+    <string name="back_to_home">Torna all\'inizio</string>
+    <string name="show_sidebar">Mostra barra laterale</string>
+    <string name="show_folder_tree">Mostra albero delle cartelle</string>
+    <string name="hide_folder_tree">Nascondi albero delle cartelle</string>
+    <string name="folder_tree_title">Cartelle</string>
+    <string name="tree_show_files">Mostra note e lavagne nell\'albero delle cartelle</string>
+    <string name="tree_add_folder">Crea cartella</string>
+    <string name="tree_move_folder">Sposta elemento</string>
+    <string name="tree_folder_created_error">Impossibile creare la cartella.</string>
+    <string name="tree_folder_moved_error">Impossibile spostare l\'elemento.</string>
+    <string name="preferences">Preferenze</string>
+    <string name="reset_to_defaults">Ripristina predefiniti</string>
+    <string name="pref_general">Generale</string>
+    <string name="pref_language">Lingua</string>
+    <string name="language_system">Predefinita di sistema</string>
+    <string name="language_en">English</string>
+    <string name="language_it">Italiano</string>
+    <string name="language_zh_hans">简体中文</string>
+    <string name="pref_ui_theme">Tema interfaccia</string>
+    <string name="theme_system">Sistema</string>
+    <string name="theme_dark">Scuro</string>
+    <string name="theme_light">Chiaro</string>
+    <string name="theme_oled">OLED (Nero assoluto)</string>
+    <string name="pref_accent_colour">Colore di accento</string>
+    <string name="pref_start_fullscreen">Avvia a schermo intero</string>
+    <string name="pref_input">Input</string>
+    <string name="pref_finger_draws">Disegna con il dito (disattivo = sposta con il dito)</string>
+    <string name="pref_zoom_lock_pan">Spostamento con zoom bloccato</string>
+    <string name="pan_single">Sposta con un dito</string>
+    <string name="pan_two">Sposta con due dita</string>
+    <string name="pan_none">Nessuno spostamento</string>
+    <string name="pref_detect_shapes">Converti tratti in forme tenendo ferma la penna</string>
+    <string name="pref_pen_button_hold">Pulsante laterale stilo/penna (pressione continua)</string>
+    <string name="pref_pen_button_hover">Attiva al passaggio ravvicinato (senza toccare lo schermo)</string>
+    <string name="pref_two_finger_tap">Tocco a due dita</string>
+    <string name="pref_three_finger_tap">Tocco a tre dita</string>
+    <string name="pref_stylus_double_tap">Doppio tocco stilo</string>
+    <string name="pref_stylus_button_tap">Pulsante laterale stilo (tocco singolo)</string>
+    <string name="pref_redmi_buttons">Pulsanti laterali Redmi Smart Pen (tocco)</string>
+    <string name="pen_button_1">Pulsante 1</string>
+    <string name="pen_button_2">Pulsante 2</string>
+    <string name="pref_new_notes">Nuove note</string>
+    <string name="pref_filename_template">Modello nome file</string>
+    <string name="pref_page">Pagina</string>
+    <string name="pref_default_page_size">Dimensione pagina predefinita</string>
+    <string name="width_mm">Larghezza (mm)</string>
+    <string name="height_mm">Altezza (mm)</string>
+    <string name="pref_orientation">Orientamento</string>
+    <string name="orientation_portrait">Verticale</string>
+    <string name="orientation_landscape">Orizzontale</string>
+    <string name="pref_hide_page_borders">Nascondi bordi pagina</string>
+    <string name="pref_page_colour">Colore pagina</string>
+    <string name="pref_page_colour_follows_theme">Il colore della pagina segue il tema</string>
+    <string name="pref_pdf_export">Esportazione PDF</string>
+    <string name="pref_pdf_heading_bookmarks">Segnalibri dai titoli</string>
+    <string name="pref_performance">Prestazioni</string>
+    <string name="pref_cache_help">Valori più alti migliorano la fluidità durante panoramica e zoom, ma utilizzano più memoria. La nitidezza di inchiostro e PDF rimane identica.</string>
+    <string name="pref_disable_front_buffering">Disattiva buffer frontale (front buffering)</string>
+    <string name="pref_front_buffering_help">Il buffer frontale disegna l\'inchiostro direttamente nel fotogramma mostrato a schermo, rendendo la scrittura istantanea. Su alcuni schermi può causare sfarfallii; disattivandolo, i tratti passeranno per il rendering standard.</string>
+    <string name="pref_code_highlighting">Evidenziazione codice</string>
+    <string name="pref_default_code_language">Linguaggio codice predefinito</string>
+    <string name="pref_code_language_help">"Incolla come codice" evidenzia il blocco incollato in questo linguaggio.</string>
+    <string name="code_plain">semplice (nessuna evidenziazione)</string>
+    <string name="pref_code_theme">Tema codice</string>
+    <string name="pref_code_theme_help">Importa un tema per editor Helix (.toml) per cambiare i colori del codice.</string>
+    <string name="custom_theme">Tema personalizzato</string>
+    <string name="import_theme">Importa tema…</string>
+    <string name="pref_fonts">Caratteri</string>
+    <string name="pref_fonts_help">Importa un file .ttf o .otf per renderlo disponibile nei selettori di caratteri.</string>
+    <string name="import_font">Importa carattere…</string>
+    <string name="mono_suffix">  mono</string>
+    <string name="remove">Rimuovi</string>
+    <string name="pref_toolbar">Barra degli strumenti</string>
+    <string name="pref_toolbar_help">Tocca uno strumento per mostrarlo o nasconderlo. Tieni premuto per trascinarlo all\'interno o tra le sezioni. Tieni premuta la parte superiore di una sezione per spostarla interamente.</string>
+    <string name="toggle_pan">Attiva/disattiva spostamento</string>
+    <string name="toggle_eraser">Attiva/disattiva gomma</string>
+    <string name="toggle_previous">Torna allo strumento precedente</string>
+    <string name="pref_filename_template_help">YYYY YY MM DD HH mm ss vengono sostituiti con data e ora di creazione. # genera un numero progressivo per evitare conflitti nella cartella.</string>
+    <string name="pref_next_note_named">La prossima nota si chiamerà %1$s</string>
+    <string name="pref_side_margin_px">Margine laterale  %1$d px</string>
+    <string name="pref_max_cache_px">Risoluzione massima cache  %1$d px</string>
+    <string name="pref_toolbar_colours_n">Colori sulla barra  %1$d</string>
+
+    <!-- Home screen and explorer -->
+    <string name="collapse_sidebar">Comprimi barra laterale</string>
+    <string name="home">Inizio</string>
+    <string name="new_note">Nuova nota</string>
+    <string name="new_canvas">Nuova lavagna</string>
+    <string name="about">Informazioni</string>
+    <string name="new_note_menu">Nuova nota</string>
+    <string name="new_canvas_menu">Nuova lavagna</string>
+    <string name="import_pdf">Importa PDF</string>
+    <string name="create_new">Nuovo</string>
+    <string name="choose_folder_hint">Scegli una cartella in cui salvare ed esplorare le tue note.</string>
+    <string name="choose_folder">Scegli cartella</string>
+    <string name="use_app_storage">Usa memoria app</string>
+    <string name="new_folder">Nuova cartella</string>
+    <string name="paste">Incolla</string>
+    <string name="clear_clipboard">Cancella appunti</string>
+    <string name="more">Altro</string>
+    <string name="sort_by">Ordina per</string>
+    <string name="sort_name">Nome</string>
+    <string name="sort_modified">Data di modifica</string>
+    <string name="sort_size">Dimensione</string>
+    <string name="change_folder">Cambia cartella</string>
+    <string name="forget_folder">Dimentica cartella</string>
+    <string name="open_side_by_side">Apri affiancato</string>
+    <string name="copy">Copia</string>
+    <string name="cut">Taglia</string>
+    <string name="delete">Elimina</string>
+    <string name="searching">Ricerca in corso…</string>
+    <string name="loading">Caricamento in corso…</string>
+    <string name="folder_empty">Questa cartella non contiene note.</string>
+    <string name="import_title">Importa</string>
+    <string name="folder_name">Nome cartella</string>
+    <string name="delete_confirm_title">Eliminare?</string>
+    <string name="search_notes">Cerca note</string>
+    <string name="clear_search">Cancella ricerca</string>
+    <string name="search">Cerca</string>
+    <string name="find_in_note">Trova nella nota</string>
+    <string name="match_case">Maiuscole/minuscole</string>
+    <string name="whole_words">Parole intere</string>
+    <string name="previous_match">Corrispondenza precedente</string>
+    <string name="next_match">Corrispondenza successiva</string>
+    <string name="no_matches">Nessuna corrispondenza</string>
+    <string name="search_position">%1$s / %2$s</string>
+    <string name="share">Condividi</string>
+    <string name="save_copy_ellipsis">Salva una copia…</string>
+    <string name="export_pdf">Esporta in PDF</string>
+    <string name="export_pdf_action">Esporta PDF</string>
+    <string name="sort_descending">Decrescente</string>
+    <string name="sort_ascending">Crescente</string>
+    <string name="folder">Cartella</string>
+    <string name="err_paste_some">Impossibile incollare alcuni elementi qui.</string>
+    <string name="err_move_some">Impossibile spostare alcuni elementi.</string>
+    <string name="no_notes_match">Nessuna nota corrisponde a “%1$s”.</string>
+    <string name="save">Salva</string>
+    <string name="create">Crea</string>
+    <string name="err_save_that_note">Impossibile salvare questa nota.</string>
+    <string name="err_pdf_password">Il PDF è protetto da password, che xnotes non supporta.</string>
+    <string name="err_create_folder">Impossibile creare la cartella.</string>
+    <string name="err_create_canvas">Impossibile creare la lavagna.</string>
+    <string name="err_create_note">Impossibile creare la nota.</string>
+    <string name="rename_folder">Rinomina cartella</string>
+    <string name="delete_one_confirm">Eliminare “%1$s”? L\'azione non può essere annullata.</string>
+    <string name="err_delete_some">Impossibile eliminare alcuni elementi.</string>
+    <plurals name="delete_items_confirm">
+        <item quantity="one">Eliminare %d elemento? L\'azione non può essere annullata.</item>
+        <item quantity="other">Eliminare %d elementi? L\'azione non può essere annullata.</item>
+    </plurals>
+    <string name="expand_sidebar">Espandi barra laterale</string>
+    <string name="unpin_from_sidebar">Rimuovi dalla barra laterale</string>
+    <string name="remove_name">Rimuovi nome</string>
+    <string name="name_this_colour">Assegna un nome al colore</string>
+    <string name="colour_name_placeholder">es. Importante</string>
+    <string name="new_folder_menu">Nuova cartella</string>
+    <string name="finding">Ricerca in corso…</string>
+    <string name="nothing_this_colour">Nessun elemento con questo colore.</string>
+    <string name="recent_empty">Nessuna nota aperta di recente. Le note e le lavagne aperte appariranno qui.</string>
+    <string name="nothing_to_show">Niente da mostrare qui.</string>
+    <string name="no_pdf_notes_here">Nessuna nota PDF qui.</string>
+    <string name="include_subfolders">Includi sottocartelle</string>
+    <string name="opened_on_device">aperto su questo dispositivo</string>
+    <string name="clear">Cancella</string>
+    <string name="in_every_folder">in ogni cartella</string>
+    <string name="clear_colour_filter">Rimuovi filtro colore</string>
+    <string name="top_folder">Cartella principale</string>
+    <string name="view_options">Opzioni di visualizzazione</string>
+    <string name="move_to_folder">Sposta nella cartella</string>
+    <string name="move_here">Sposta qui</string>
+    <string name="preview">Anteprima</string>
+    <string name="move_to_folder_ellipsis">Sposta nella cartella…</string>
+    <string name="name_colour_ellipsis">Assegna nome al colore…</string>
+    <string name="err_open_folder">Impossibile aprire la cartella.</string>
+    <string name="moved_one_to_trash">“%1$s” spostato nel cestino</string>
+    <string name="move_to_trash">Sposta nel cestino</string>
+    <string name="nothing_here_yet">Ancora nulla qui.</string>
+    <string name="kind_no_folders">Nessuna cartella qui.</string>
+    <string name="kind_no_notes">Nessuna nota qui.</string>
+    <string name="kind_no_canvases">Nessuna lavagna qui.</string>
+    <string name="all_kinds">Tutti i tipi</string>
+    <string name="move_one_to">Sposta “%1$s” in</string>
+    <string name="pin_to_sidebar">Aggiungi alla barra laterale</string>
+    <plurals name="moved_items_to_trash">
+        <item quantity="one">Spostato %d elemento nel cestino</item>
+        <item quantity="other">Spostati %d elementi nel cestino</item>
+    </plurals>
+    <plurals name="err_move_items_to_trash">
+        <item quantity="one">Impossibile spostare %d elemento nel cestino.</item>
+        <item quantity="other">Impossibile spostare %d elementi nel cestino.</item>
+    </plurals>
+    <plurals name="paste_items">
+        <item quantity="one">Incolla %d elemento</item>
+        <item quantity="other">Incolla %d elementi</item>
+    </plurals>
+    <plurals name="paste_items_here">
+        <item quantity="one">Incolla %d elemento qui</item>
+        <item quantity="other">Incolla %d elementi qui</item>
+    </plurals>
+    <plurals name="notes_created_in">
+        <item quantity="one">%1$d nota creata in %2$s</item>
+        <item quantity="other">%1$d note create in %2$s</item>
+    </plurals>
+    <plurals name="notes_saved_in">
+        <item quantity="one">%1$d nota salvata in %2$s</item>
+        <item quantity="other">%1$d note salvate in %2$s</item>
+    </plurals>
+    <plurals name="move_items_to">
+        <item quantity="one">Sposta %d elemento in</item>
+        <item quantity="other">Sposta %d elementi in</item>
+    </plurals>
+
+    <!-- Messages, sharing and export -->
+    <string name="exporting_pdf">Esportazione in PDF in corso…</string>
+    <string name="exporting_pdfs">Esportazione PDF in corso…</string>
+    <string name="may_take_moment">L\'operazione potrebbe richiedere qualche istante.</string>
+    <string name="saving_notes">Salvataggio delle note…</string>
+    <string name="opening_note">Apertura nota…</string>
+    <string name="share_note">Condividi nota</string>
+    <string name="unsaved_changes">Modifiche non salvate</string>
+    <string name="discard">Scarta</string>
+    <string name="err_save_note">Impossibile salvare la nota.</string>
+    <string name="exported_pdf">Esportato in PDF.</string>
+    <string name="exported_some_pdfs">Esportati %1$d di %2$d PDF.</string>
+    <string name="no_notes_to_export">Nessuna nota da esportare.</string>
+    <plurals name="exported_pdfs">
+        <item quantity="one">Esportato %d PDF.</item>
+        <item quantity="other">Esportati %d PDF.</item>
+    </plurals>
+    <string name="err_export_pdf">Impossibile esportare in PDF.</string>
+    <string name="err_save_copy">Impossibile salvare una copia.</string>
+    <string name="err_save_image">Impossibile salvare l\'immagine.</string>
+    <string name="err_save_images">Impossibile salvare le immagini.</string>
+    <string name="err_read_image">Impossibile leggere l\'immagine.</string>
+    <string name="err_read_file">Impossibile leggere il file.</string>
+    <string name="err_insert_pdf">Impossibile inserire il PDF.</string>
+    <string name="err_open_second">Impossibile aprire la seconda nota.</string>
+    <string name="share_named">Condividi %1$s</string>
+    <string name="err_share_note">Impossibile condividere la nota.</string>
+    <string name="err_share_pages">Impossibile condividere le pagine.</string>
+    <string name="share_as">Condividi “%1$s” come:</string>
+    <string name="file_of_kind">File %1$s</string>
+    <string name="unsaved_changes_prompt">Salvare le modifiche a “%1$s” prima di continuare?</string>
+    <string name="writing_pdf">Scrittura del PDF in corso…</string>
+    <string name="preparing">Preparazione in corso…</string>
+    <string name="export_page_progress">pagina %1$d / %2$d</string>
+    <string name="export_item_progress">elemento %1$d / %2$d</string>
+    <string name="export_writing_short">scrittura…</string>
+    <!-- What a screen reader says for the handwriting and for each image in an exported PDF -->
+    <string name="pdf_alt_drawing">Note manoscritte e disegni</string>
+    <string name="pdf_alt_image">Immagine</string>
+    <string name="importing_pdf">Importazione PDF…</string>
+    <string name="importing_pdfs">Importazione PDF in corso…</string>
+    <string name="import_progress">%1$d di %2$d importati</string>
+    <plurals name="imported_pdfs">
+        <item quantity="one">Importato %d PDF</item>
+        <item quantity="other">Importati %d PDF</item>
+    </plurals>
+    <string name="unlock_zoom">Sblocca zoom</string>
+    <string name="lock_zoom_fit_width">Blocca zoom su larghezza pagina</string>
+    <string name="lock_zoom">Blocca zoom</string>
+    <plurals name="saved_images">
+        <item quantity="one">Salvata %d immagine.</item>
+        <item quantity="other">Salvate %d immagini.</item>
+    </plurals>
+    <plurals name="export_writing_pages">
+        <item quantity="one">Scrittura di %d pagina…</item>
+        <item quantity="other">Scrittura di %d pagine…</item>
+    </plurals>
+    <plurals name="export_writing_items">
+        <item quantity="one">Scrittura di %d elemento…</item>
+        <item quantity="other">Scrittura di %d elementi…</item>
+    </plurals>
+    <string name="image_copied">Immagine copiata negli appunti.</string>
+    <string name="err_copy_image">Impossibile copiare l\'immagine.</string>
+    <string name="err_clipboard_no_image">Nessuna immagine negli appunti da incollare.</string>
+    <string name="err_read_sticker">Impossibile leggere l\'adesivo.</string>
+    <string name="err_open_that_note">Impossibile aprire la nota.</string>
+    <string name="err_not_xnotes">Non è un documento xnotes valido.</string>
+    <string name="err_open_note">Impossibile aprire la nota.</string>
+    <string name="note_forked">Questa nota è stata modificata altrove. Le tue modifiche sono ora in “%1$s”.</string>
+    <string name="canvas_forked">Questa lavagna è stata modificata altrove. Le tue modifiche sono ora in “%1$s”.</string>
+    <string name="err_keep_one_page">Una nota deve contenere almeno una pagina.</string>
+    <string name="page_already_empty">La pagina è già vuota.</string>
+    <string name="err_helix_theme">Tema Helix non valido (è richiesto un file .toml autonomo).</string>
+    <string name="err_store_theme">Impossibile salvare il file del tema.</string>
+    <string name="code_theme_imported">Tema del codice importato.</string>
+    <string name="font_imported">Carattere "%1$s" importato.</string>
+    <string name="err_import_font">Impossibile importare il carattere.</string>
+    <string name="font_err_unavailable">Caratteri non disponibili.</string>
+    <string name="font_err_unnamed">Impossibile ricavare il nome del carattere.</string>
+    <string name="font_err_built_in">“%1$s” è già integrato nell\'app.</string>
+    <string name="font_err_unreadable">File di carattere .ttf/.otf non leggibile.</string>
+    <string name="err_share_notes">Impossibile condividere le note.</string>
+    <plurals name="share_n_notes">
+        <item quantity="one">Condividi %d nota</item>
+        <item quantity="other">Condividi %d note</item>
+    </plurals>
+
+    <!-- Side panel -->
+    <string name="pages">Pagine</string>
+    <string name="contents">Sommario</string>
+    <string name="bookmarks">Segnalibri</string>
+    <string name="selected">Selezionati</string>
+    <string name="page_options">Opzioni pagina</string>
+    <string name="back_share_as">‹  Condividi come</string>
+    <string name="image_png">Immagine (PNG)</string>
+    <string name="back_save_as">‹  Salva come</string>
+    <string name="add_page">Aggiungi pagina</string>
+    <string name="insert_pdf">Inserisci PDF</string>
+    <string name="erase_page">Svuota pagina</string>
+    <string name="share_ellipsis">Condividi…</string>
+    <string name="save_as_ellipsis">Salva come…</string>
+    <string name="clear_selection">Deseleziona tutto</string>
+    <string name="save_as">Salva come</string>
+    <string name="no_contents">— nessun sommario —</string>
+    <string name="add_bookmark">Aggiungi segnalibro</string>
+    <string name="no_bookmarks">— nessun segnalibro —</string>
+    <string name="add">Aggiungi</string>
+    <string name="page_n">Pagina %1$d</string>
+    <string name="bookmark_entry">%1$s · p.%2$d</string>
+
+    <!-- Selection and long-press menus -->
+    <string name="bring_to_front">Porta in primo piano</string>
+    <string name="duplicate">Duplica</string>
+    <string name="change_style">Cambia stile</string>
+    <string name="lock">Blocca</string>
+    <string name="shape_label">Etichetta</string>
+    <string name="connector_reroute">Ricalcola percorso</string>
+    <string name="mirror_left_right">Rifletti orizzontalmente</string>
+    <string name="mirror_upside_down">Rifletti verticalmente</string>
+    <string name="title_change_style">Cambia stile</string>
+    <string name="caption_thickness">Spessore</string>
+    <string name="change_style_hint">Si applica ai tratti e alle forme selezionate.</string>
+    <string name="copy_as_image">Copia come immagine</string>
+    <string name="unlock">Sblocca</string>
+    <string name="paste_here">Incolla qui</string>
+    <string name="paste_markdown">Incolla come Markdown</string>
+    <string name="paste_code">Incolla come Codice</string>
+
+    <!-- About -->
+    <string name="app_tagline">Un\'applicazione di scrittura a mano libera e disegno per Android</string>
+    <string name="copy_version">Copia versione</string>
+    <string name="help_make_better">Aiuta a migliorare xnotes</string>
+    <string name="report_bug">Segnala un bug</string>
+    <string name="request_feature">Suggerisci una funzione</string>
+    <string name="sponsor">Supporta</string>
+    <string name="enjoying_xnotes">Ti piace xnotes? </string>
+    <string name="star_on_github">Lascia una stella su GitHub</string>
+    <string name="mit_license">Licenza MIT</string>
+    <string name="version_n">Versione %1$s</string>
+    <string name="version_copied">Versione copiata</string>
+
+    <!-- Text formatting -->
+    <string name="checkbox_item">Elemento con casella</string>
+    <string name="bold">Grassetto</string>
+    <string name="italic">Corsivo</string>
+    <string name="underline">Sottolineato</string>
+    <string name="strikethrough">Barrato</string>
+    <string name="ordered_list">Elenco numerato</string>
+    <string name="bullet_list">Elenco puntato</string>
+    <string name="alignment">Allineamento</string>
+    <string name="indent">Aumenta rientro</string>
+    <string name="outdent">Riduci rientro</string>
+    <string name="code_block">Blocco di codice</string>
+    <string name="heading">Titolo</string>
+    <string name="body_text">Testo principale</string>
+    <string name="heading_n">Titolo %1$d</string>
+    <string name="smaller">Più piccolo</string>
+    <string name="larger">Più grande</string>
+    <string name="font">Carattere</string>
+    <string name="mono_font">Carattere a spaziatura fissa</string>
+    <string name="size_pt">Dimensione (pt)</string>
+    <string name="colour">Colore</string>
+    <string name="auto">Automatico</string>
+    <string name="margins_mm">Margini (mm)</string>
+    <string name="markdown_shortcuts">Scorciatoie Markdown</string>
+    <string name="slash_commands">Comandi slash (/)</string>
+    <string name="equation">Equazione</string>
+    <string name="select_latex_first">Seleziona il codice LaTeX da convertire in formula</string>
+    <string name="insert_date">Data</string>
+    <string name="insert_time">Ora</string>
+    <string name="done">Fatto</string>
+    <string name="text_colour">Colore del testo</string>
+    <string name="remove_highlight">Rimuovi evidenziazione</string>
+
+    <!-- Tooltips -->
+    <string name="tip_tap_for_settings">Tocca per le impostazioni</string>
+    <string name="tip_hold_for_language">Tieni premuto per scegliere il linguaggio</string>
+
+    <!-- Tables -->
+    <string name="insert_table">Inserisci tabella</string>
+    <string name="table_style">Stile tabella</string>
+    <string name="edit_table">Modifica tabella</string>
+    <string name="fit_columns">Adatta colonne</string>
+    <string name="delete_table">Elimina tabella</string>
+    <string name="table_rows">Righe</string>
+    <string name="table_columns">Colonne</string>
+    <string name="table_padding">Spaziatura interna</string>
+    <string name="table_lines">Linee</string>
+    <string name="table_line_colour">Colore linee</string>
+    <string name="table_header_row">Riga di intestazione</string>
+    <string name="table_banded_rows">Righe alternate</string>
+    <string name="table_tint">Sfumatura</string>
+    <string name="default_for_new_tables">Predefinito per nuove tabelle</string>
+    <string name="table_borders_all">Tutti</string>
+    <string name="table_borders_outer">Esterni</string>
+    <string name="table_borders_rows">Righe</string>
+    <string name="table_borders_none">Nessuno</string>
+    <string name="table_pt_value">%1$s pt</string>
+    <string name="insert">Inserisci</string>
+    <string name="move">Sposta</string>
+
+    <!-- Canvas styles and waypoints -->
+    <string name="caption_spacing">Spaziatura</string>
+    <string name="caption_paper">Carta</string>
+    <string name="paper_theme">Tema</string>
+    <string name="default_for_new_canvases">Predefinito per nuove lavagne</string>
+    <string name="title_waypoints">Viste salvate</string>
+    <string name="no_waypoints">Nessuna vista salvata.</string>
+    <string name="caption_save_view">Salva questa vista</string>
+
+    <!-- Colour picker -->
+    <string name="swatches">Campioni</string>
+    <string name="spectrum">Spettro</string>
+    <string name="caption_recent">Recenti</string>
+
+    <!-- Canvas and storage -->
+    <string name="pull_to_add_page">Trascina per aggiungere una pagina</string>
+    <string name="release_to_add_page">Rilascia per aggiungere la pagina</string>
+    <string name="app_storage">Home</string>
+
+    <!-- Explorer: dates, counts and kinds -->
+    <string name="today">Oggi</string>
+    <string name="yesterday">Ieri</string>
+    <string name="earlier_this_week">All\'inizio della settimana</string>
+    <string name="last_week">Settimana scorsa</string>
+    <string name="earlier_in">A inizio %1$s</string>
+    <string name="month_year">%1$s %2$d</string>
+    <string name="just_now">Proprio ora</string>
+    <string name="minutes_ago">%1$d min fa</string>
+    <string name="hours_ago">%1$d h fa</string>
+    <string name="day_month">%1$d %2$s</string>
+    <string name="day_month_year">%1$d %2$s %3$d</string>
+    <string name="date_with_time">%1$s, %2$s</string>
+    <string name="clock_12h">%1$d:%2$02d %3$s</string>
+    <string name="am">AM</string>
+    <string name="pm">PM</string>
+    <string name="opened_ago">Aperto %1$s</string>
+    <string name="kind_folders">Cartelle</string>
+    <string name="kind_notes">Note</string>
+    <string name="kind_pdf_notes">Note PDF</string>
+    <string name="kind_canvases">Lavagne</string>
+    <string name="hue_black">Nero</string>
+    <string name="hue_white">Bianco</string>
+    <string name="hue_grey">Grigio</string>
+    <string name="hue_red">Rosso</string>
+    <string name="hue_orange">Arancione</string>
+    <string name="hue_yellow">Giallo</string>
+    <string name="hue_green">Verde</string>
+    <string name="hue_teal">Verde acqua (Teal)</string>
+    <string name="hue_blue">Blu</string>
+    <string name="hue_purple">Viola</string>
+    <string name="hue_pink">Rosa</string>
+    <string name="no_colour">Nessun colore</string>
+    <string name="layout_grid">Griglia</string>
+    <string name="layout_gallery">Galleria</string>
+    <string name="layout_list">Elenco</string>
+    <string name="layout_columns">Colonne</string>
+    <string name="layout_timeline">Cronologia</string>
+    <string name="group_date">Data</string>
+    <string name="group_kind">Tipo</string>
+    <string name="no_grouping">Nessun raggruppamento</string>
+    <string name="grouped_by_date">Raggruppati per data</string>
+    <string name="grouped_by_kind">Raggruppati per tipo</string>
+    <string name="grouped_by_colour">Raggruppati per colore</string>
+    <string name="folders_on_top">In alto</string>
+    <string name="folders_mixed">Mescolate</string>
+    <string name="folders_hidden">Nascoste</string>
+    <string-array name="months">
+        <item>Gennaio</item>
+        <item>Febbraio</item>
+        <item>Marzo</item>
+        <item>Aprile</item>
+        <item>Maggio</item>
+        <item>Giugno</item>
+        <item>Luglio</item>
+        <item>Agosto</item>
+        <item>Settembre</item>
+        <item>Ottobre</item>
+        <item>Novembre</item>
+        <item>Dicembre</item>
+    </string-array>
+    <string-array name="months_short">
+        <item>Gen</item>
+        <item>Feb</item>
+        <item>Mar</item>
+        <item>Apr</item>
+        <item>Mag</item>
+        <item>Giu</item>
+        <item>Lug</item>
+        <item>Ago</item>
+        <item>Set</item>
+        <item>Ott</item>
+        <item>Nov</item>
+        <item>Dic</item>
+    </string-array>
+    <string-array name="weekdays_short">
+        <item>Lun</item>
+        <item>Mar</item>
+        <item>Mer</item>
+        <item>Gio</item>
+        <item>Ven</item>
+        <item>Sab</item>
+        <item>Dom</item>
+    </string-array>
+    <plurals name="days_ago">
+        <item quantity="one">%d giorno fa</item>
+        <item quantity="other">%d giorni fa</item>
+    </plurals>
+    <plurals name="folders_count">
+        <item quantity="one">%d cartella</item>
+        <item quantity="other">%d cartelle</item>
+    </plurals>
+    <plurals name="files_count">
+        <item quantity="one">%d file</item>
+        <item quantity="other">%d file</item>
+    </plurals>
+    <plurals name="items_count">
+        <item quantity="one">%d elemento</item>
+        <item quantity="other">%d elementi</item>
+    </plurals>
+
+    <!-- Explorer -->
+    <string name="sort_created">Data di creazione</string>
+    <string name="select_all">Seleziona tutto</string>
+    <string name="close_view_options">Chiudi opzioni di visualizzazione</string>
+    <string name="opt_layout">Layout</string>
+    <string name="opt_rows">Righe</string>
+    <string name="rows_comfortable">Comode</string>
+    <string name="rows_compact">Compatte</string>
+    <string name="opt_tile_size">Dimensione riquadri</string>
+    <string name="pinch_hint">Oppure pizzica la griglia per ridimensionare i riquadri</string>
+    <string name="opt_place_by">Disponi i file per</string>
+    <string name="opt_thumbnail">Miniatura</string>
+    <string name="thumb_top">Inizio pagina</string>
+    <string name="thumb_page">Pagina intera</string>
+    <string name="opt_show_on_tiles">Mostra sui riquadri</string>
+    <string name="show_page_count">Numero pagine</string>
+    <string name="show_time">Ora</string>
+    <string name="colour_code">Codice colore</string>
+    <string name="opt_group_by">Raggruppa per</string>
+    <string name="view_every_folder">Usa questa vista in ogni cartella</string>
+    <string name="view_every_folder_hint">Disattivo: ogni cartella memorizza la propria visualizzazione</string>
+    <string name="sort_z_to_a">Dalla Z alla A</string>
+    <string name="sort_a_to_z">Dalla A alla Z</string>
+    <string name="largest_first">Più grandi prima</string>
+    <string name="smallest_first">Più piccoli prima</string>
+    <string name="newest_first">Più recenti prima</string>
+    <string name="oldest_first">Meno recenti prima</string>
+    <string name="n_selected">%1$d selezionati</string>
+    <string name="modified">Modificato</string>
+    <string name="created">Creato</string>
+    <string name="kind_note">Nota</string>
+    <string name="kind_pdf_note">Nota PDF</string>
+    <string name="kind_canvas">Lavagna</string>
+    <string name="more_for">Altro su %1$s</string>
+    <string name="pinned_to_sidebar">Fissato nella barra laterale</string>
+    <string name="recent">Recenti</string>
+    <string name="see_all">Vedi tutti</string>
+    <string name="pinned">Fissati</string>
+    <string name="in_folder">In %1$s</string>
+    <plurals name="pages_count">
+        <item quantity="one">%d pagina</item>
+        <item quantity="other">%d pagine</item>
+    </plurals>
+    <string name="pick_note_hint">Seleziona una nota per vederla qui</string>
+    <string name="previous_month">Mese precedente</string>
+    <string name="next_month">Mese successivo</string>
+    <string name="nothing_created_in">Nessun elemento creato nel mese di %1$s.</string>
+    <string name="nothing_saved_in">Nessun elemento salvato nel mese di %1$s.</string>
+    <string name="open">Apri</string>
+    <string name="close_preview">Chiudi anteprima</string>
+    <string name="where_label">Posizione</string>
+    <string name="no_folders_here">Nessuna cartella qui.</string>
+
+    <!-- Trash -->
+    <string name="trash">Cestino</string>
+    <string name="empty_trash">Svuota cestino</string>
+    <string name="trash_off_hint">Il cestino è disattivato. L\'eliminazione è permanente. Gli elementi già presenti rimangono finché non svuoti il cestino.</string>
+    <string name="trash_forever_hint">Gli elementi rimangono qui finché non svuoti il cestino manualmente.</string>
+    <string name="change">Modifica</string>
+    <string name="trash_no_root">Seleziona prima una cartella per le tue note.</string>
+    <string name="trash_empty">Il cestino è vuoto.</string>
+    <string name="trash_was_in">Si trovava in</string>
+    <string name="trash_deleted">Eliminato</string>
+    <string name="trash_removed_in">Rimosso in</string>
+    <string name="empty_trash_confirm">Svuotare il cestino?</string>
+    <string name="empty_trash_body">Tutti gli elementi nel cestino verranno eliminati definitivamente. Questa azione non può essere annullata.</string>
+    <string name="delete_permanently_confirm">Eliminare definitivamente?</string>
+    <string name="restore">Ripristina</string>
+    <string name="delete_permanently">Elimina definitivamente</string>
+    <string name="trash_no_match">Nessun elemento nel cestino corrisponde a “%1$s”.</string>
+    <string name="the_top_folder">la cartella principale</string>
+    <string name="restored_item">Ripristinato “%1$s”</string>
+    <string name="err_restore_item">Impossibile ripristinare “%1$s”</string>
+    <string name="restore_hint">Il ripristino ricolloca l\'elemento nella cartella originaria, oppure in %1$s se tale cartella non esiste più.</string>
+    <string name="delete_permanently_body">“%1$s” verrà eliminato definitivamente. Questa azione non può essere annullata.</string>
+    <string name="trash_row_sub">%1$s · da %2$s · %3$s</string>
+    <string name="never">Mai</string>
+    <plurals name="trash_deleted_after">
+        <item quantity="one">Gli elementi vengono eliminati definitivamente dopo %d giorno.</item>
+        <item quantity="other">Gli elementi vengono eliminati definitivamente dopo %d giorni.</item>
+    </plurals>
+    <plurals name="days_count">
+        <item quantity="one">%d giorno</item>
+        <item quantity="other">%d giorni</item>
+    </plurals>
+
+    <!-- Preferences: home and explorer -->
+    <string name="pref_home_explorer">Pagina iniziale ed esplora file</string>
+    <string name="pref_home_explorer_help">Aspetto e comportamento della schermata iniziale e dell\'esplora file. I layout possono comunque essere cambiati per singola cartella.</string>
+    <string name="pref_default_layout">Layout predefinito</string>
+    <string name="pref_switcher_layouts">Layout nel selettore</string>
+    <string name="pref_sidebar_sections">Sezioni barra laterale</string>
+    <string name="pref_home_opens_to">La schermata iniziale apre</string>
+    <string name="last_folder">Ultima cartella aperta</string>
+    <string name="recent_and_pinned">Recenti e fissati</string>
+    <string name="pref_tapping_file">Tocco su un file</string>
+    <string name="tap_opens">Lo apre direttamente</string>
+    <string name="tap_previews">Mostra un\'anteprima</string>
+    <string name="pref_keep_deleted">Conserva elementi eliminati</string>
+    <string name="until_emptied">Fino allo svuotamento manuale</string>
+    <string name="pref_colour_names">Nomi dei colori</string>
+    <string name="name_a_colour">Assegna nome a un colore</string>
+    <string name="pref_per_folder_views">Ricorda la vista per ciascuna cartella</string>
+    <string name="pref_show_folder_counts">Mostra il conteggio elementi sulle cartelle</string>
+    <string name="pref_show_extensions">Mostra le estensioni dei file (.xnote, .xcanvas)</string>
+    <string name="pref_dates">Date</string>
+    <string name="material_system_colours">Colori di sistema</string>
+    <string name="material_system_fallback">Usa il colore di accento predefinito di questo dispositivo.</string>
+    <string name="material_custom_colour">Scegli un colore personalizzato</string>
+    <string name="material_style">Stile</string>
+    <string name="material_tone">Modalità colore</string>
+    <string name="material_single_tone">Tinta unita</string>
+    <string name="material_dual_tone">Bicolore</string>
+    <string name="material_surface_colour">Colore superficie</string>
+    <string name="material_colour_presets">Preimpostazioni colore</string>
+    <string name="material_custom">Personalizzato</string>
+    <string name="material_indigo">Indaco</string>
+    <string name="material_amber">Ambra</string>
+    <string name="material_morning">Mattino</string>
+    <string name="material_evening">Sera</string>
+    <string name="material_sea">Mare</string>
+    <string name="material_forest">Foresta</string>
+    <string name="material_earth">Terra</string>
+    <string name="material_lavender">Lavanda</string>
+    <string name="material_lake">Lago</string>
+    <string name="material_desert">Deserto</string>
+    <string name="material_untinted_surfaces">Questo stile utilizza superfici neutre. Il colore della superficie scelto viene conservato per gli altri stili.</string>
+    <string name="material_style_soft">Morbido</string>
+    <string name="material_style_vivid">Vivace</string>
+    <string name="material_style_original">Originale</string>
+    <string name="material_style_playful">Giocoso</string>
+    <string name="material_style_fresh">Fresco</string>
+    <string name="material_style_clean">Pulito</string>
+    <string name="material_style_muted">Tenue</string>
+    <string name="material_style_grayscale">Scala di grigi</string>
+    <string name="material_style_soft_description">Accenti di colore delicati.</string>
+    <string name="material_style_vivid_description">Accenti di colore più intensi.</string>
+    <string name="material_style_original_description">Segue fedelmente il colore scelto, ottimizzato per la leggibilità.</string>
+    <string name="material_style_playful_description">Accenti inaspettati ispirati al colore scelto.</string>
+    <string name="material_style_fresh_description">Accenti sfumati con sfondi leggermente colorati.</string>
+    <string name="material_style_clean_description">Accenti vivaci con sfondi neutri.</string>
+    <string name="material_style_muted_description">Colori sobri con superfici neutre.</string>
+    <string name="material_style_grayscale_description">Nessuna tonalità di colore. Il colore scelto è conservato per gli altri stili.</string>
+    <string name="material_contrast">Contrasto  %1$s</string>
+    <string name="pref_corners">Angoli</string>
+    <string name="corners_sharp">Squadrati</string>
+    <string name="corners_rounded">Arrotondati</string>
+    <string name="corners_soft">Morbidi</string>
+    <string name="pref_toolbar_style">Stile barra</string>
+    <string name="toolbar_docked">Ancorata</string>
+    <string name="toolbar_floating">Fluttuante</string>
+    <string name="pref_toolbar_position">Posizione</string>
+    <string name="pref_toolbar_size">Dimensione</string>
+    <string name="toolbar_size_compact">Compatta</string>
+    <string name="toolbar_size_regular">Normale</string>
+    <string name="toolbar_size_comfortable">Comoda</string>
+</resources>

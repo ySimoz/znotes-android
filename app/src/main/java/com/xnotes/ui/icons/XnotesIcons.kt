@@ -194,6 +194,8 @@ object XnotesIcons {
 
     // Backstage (File area) commands.
     val folder = icon("M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2Z")
+    /** Folder hierarchy: nested branches with a folder at the root. */
+    val folderTree = icon("M3 3h7v5H3Z", "M6.5 8v4h5", "M11.5 12v4h5", "M16.5 16v2", "M14 18h5v3h-5Z", "M9 12H4v4h5Z")
     val save = icon("M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z", "M17 21v-8H7v8", "M7 3v5h8")
     val database = icon(ellipse(12.0, 5.0, 9.0, 3.0), "M3 5V19A9 3 0 0 0 21 19V5", "M3 12A9 3 0 0 0 21 12")
     val importDoc = icon("M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", "M7 10l5 5 5-5", "M12 15V3")

@@ -8,6 +8,20 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.lazy.LazyListItemInfo
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.zIndex
+import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -143,6 +157,7 @@ private fun PagesTab(
     // contentVersion drives a fresh read of the order whenever the page list changes.
     val pages = remember(editor.contentVersion) { editor.pagesSnapshot() }
     val selecting = editor.inPageSelectionMode
+
     // One panel-wide "the list has stopped moving" flag. The custom scrollbar amplifies a slow
     // finger scrub into large page-space jumps, so the old per-row 150ms debounce still fired ~8
     // renders per window it swept past and stormed the CPU / the single-threaded PDF render lock.
@@ -158,18 +173,170 @@ private fun PagesTab(
                 value = true
             }
     }
-    Box(Modifier.fillMaxSize()) {
+
+    val dragState = remember(listState, pages.size, editor) {
+        PageRailDragState(listState, pages.size, editor::movePage)
+    }
+    RailDragAutoScroll(dragState)
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { dragState.boxCoordinates = it }
+    ) {
         LazyColumn(
-            Modifier.fillMaxSize().padding(8.dp),
+            Modifier
+                .fillMaxSize()
+                .padding(8.dp)
+                .onGloballyPositioned { dragState.listCoordinates = it },
             state = listState,
             verticalArrangement = Arrangement.spacedBy(10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             itemsIndexed(pages, key = { _, page -> page.uid }) { index, page ->
-                PageThumb(editor, index, page, selecting, settled, Modifier.animateItem(), onSharePages, onSavePagesAsPdf, onSavePagesAsImages, onInsertPdf)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.animateItem(),
+                ) {
+                    if (dragState.isDragging && dragState.dropSlot == index) {
+                        DropIndicatorLine()
+                        Spacer(Modifier.height(6.dp))
+                    }
+                    PageThumb(
+                        editor = editor,
+                        index = index,
+                        page = page,
+                        selecting = selecting,
+                        settled = settled,
+                        isDragging = dragState.isDragging && dragState.draggingIndex == index,
+                        canDrag = pages.size > 1,
+                        rowModifier = Modifier,
+                        onSharePages = onSharePages,
+                        onSavePagesAsPdf = onSavePagesAsPdf,
+                        onSavePagesAsImages = onSavePagesAsImages,
+                        onInsertPdf = onInsertPdf,
+                        onTap = {
+                            if (selecting) editor.togglePageSelection(index) else editor.goToPage(index)
+                        },
+                        onDragStart = { localOffset -> dragState.startDrag(index, localOffset) },
+                        onDrag = dragState::moveDrag,
+                        onDrop = dragState::drop,
+                        onCancel = dragState::cancel,
+                        onLongClick = { editor.togglePageSelection(index) },
+                        onPositioned = { coords -> dragState.thumbCoordinates[index] = coords },
+                    )
+                    if (dragState.isDragging && index == pages.lastIndex && dragState.dropSlot == pages.size) {
+                        Spacer(Modifier.height(6.dp))
+                        DropIndicatorLine()
+                    }
+                }
             }
         }
         VerticalScrollbar(listState, Modifier.align(Alignment.CenterEnd))
+
+        val ghostPage = dragState.draggingIndex?.let { pages.getOrNull(it) }
+        if (dragState.isDragging && ghostPage != null) {
+            PageDragGhost(
+                editor = editor,
+                page = ghostPage,
+                index = dragState.draggingIndex ?: 0,
+                modifier = Modifier.offset {
+                    IntOffset(
+                        dragState.ghostTopLeft.x.roundToInt(),
+                        dragState.ghostTopLeft.y.roundToInt(),
+                    )
+                },
+            )
+        }
+    }
+}
+
+/** State holder for drag-to-reorder gestures in the thumbnail rail. */
+private class PageRailDragState(
+    val listState: LazyListState,
+    val totalPages: Int,
+    val onMovePage: (from: Int, to: Int) -> Unit,
+) {
+    var draggingIndex by mutableStateOf<Int?>(null)
+    var dropSlot by mutableStateOf<Int?>(null)
+    var isDragging by mutableStateOf(false)
+    var ghostTopLeft by mutableStateOf(Offset.Zero)
+    var fingerPositionInList by mutableStateOf(Offset.Zero)
+
+    var boxCoordinates: LayoutCoordinates? = null
+    var listCoordinates: LayoutCoordinates? = null
+    val thumbCoordinates = mutableMapOf<Int, LayoutCoordinates>()
+
+    fun startDrag(index: Int, localOffset: Offset) {
+        draggingIndex = index
+        dropSlot = index
+        isDragging = false
+
+        val box = boxCoordinates
+        val thumb = thumbCoordinates[index]
+        if (box != null && thumb != null && box.isAttached && thumb.isAttached) {
+            ghostTopLeft = box.localPositionOf(thumb, Offset.Zero)
+            val list = listCoordinates
+            fingerPositionInList = if (list != null && list.isAttached) {
+                list.localPositionOf(thumb, localOffset)
+            } else {
+                localOffset
+            }
+        }
+    }
+
+    fun moveDrag(delta: Offset) {
+        ghostTopLeft += delta
+        fingerPositionInList += delta
+        isDragging = true
+        dropSlot = calculateDropSlot(fingerPositionInList.y, listState.layoutInfo.visibleItemsInfo, totalPages)
+    }
+
+    fun drop() {
+        val from = draggingIndex
+        val slot = dropSlot
+        if (from != null && slot != null) {
+            val to = calculateTargetIndex(from, slot, totalPages)
+            if (to != from) {
+                onMovePage(from, to)
+            }
+        }
+        cancel()
+    }
+
+    fun cancel() {
+        draggingIndex = null
+        dropSlot = null
+        isDragging = false
+    }
+}
+
+/** Automatically scrolls the thumbnail LazyColumn when dragging near its top/bottom edges. */
+@Composable
+private fun RailDragAutoScroll(dragState: PageRailDragState) {
+    LaunchedEffect(dragState.isDragging) {
+        while (dragState.isDragging) {
+            val layoutInfo = dragState.listState.layoutInfo
+            val viewportHeight = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
+            if (viewportHeight > 0) {
+                val edgeBand = 100f
+                val y = dragState.fingerPositionInList.y
+                val scrollDelta = when {
+                    y < edgeBand -> -((edgeBand - y) / edgeBand).coerceIn(0f, 1f) * 16f
+                    y > viewportHeight - edgeBand -> ((y - (viewportHeight - edgeBand)) / edgeBand).coerceIn(0f, 1f) * 16f
+                    else -> 0f
+                }
+                if (scrollDelta != 0f) {
+                    dragState.listState.scrollBy(scrollDelta)
+                    dragState.dropSlot = calculateDropSlot(
+                        dragState.fingerPositionInList.y,
+                        dragState.listState.layoutInfo.visibleItemsInfo,
+                        dragState.totalPages,
+                    )
+                }
+            }
+            delay(16L)
+        }
     }
 }
 
@@ -181,73 +348,91 @@ private fun PageThumb(
     page: Page,
     selecting: Boolean,
     settled: Boolean,
+    isDragging: Boolean,
+    canDrag: Boolean,
     rowModifier: Modifier,
     onSharePages: (List<Int>, Boolean) -> Unit,
     onSavePagesAsPdf: (List<Int>) -> Unit,
     onSavePagesAsImages: (List<Int>) -> Unit,
     onInsertPdf: (Int) -> Unit,
+    onTap: () -> Unit,
+    onDragStart: (Offset) -> Unit,
+    onDrag: (Offset) -> Unit,
+    onDrop: () -> Unit,
+    onCancel: () -> Unit,
+    onLongClick: () -> Unit,
+    onPositioned: (LayoutCoordinates) -> Unit,
 ) {
     val palette = LocalPalette.current
     val current = index == editor.pageIndex
     val selected = editor.isPageSelected(index)
     var menuOpen by remember { mutableStateOf(false) }
+
+    val tap by rememberUpdatedState(onTap)
+    val dStart by rememberUpdatedState(onDragStart)
+    val dMove by rememberUpdatedState(onDrag)
+    val dDrop by rememberUpdatedState(onDrop)
+    val dCancel by rememberUpdatedState(onCancel)
+    val lClick by rememberUpdatedState(onLongClick)
+    val touchSlop = LocalViewConfiguration.current.touchSlop
+
     val bitmap by key(editor.thumbnailVersion) {
         produceState<ImageBitmap?>(editor.cachedPageThumbnail(page), page, editor.contentVersion, editor.pdfThumbTick, settled) {
             val cached = editor.cachedPageThumbnail(page)
             if (cached != null) {
                 value = cached
             } else if (settled) {
-                // Render only once the panel has stopped moving (see the panel-wide `settled` flag in
-                // PagesTab): a scroll keeps `settled` false, so rows swept past never render — the
-                // producer relaunches and renders this row when motion settles.
                 value = editor.pageThumbnail(page, 300)
             }
-            // not cached and not settled: leave value as-is (placeholder); relaunch on settle renders it.
         }
     }
-    // Reserve the row's height from the aspect ratio so it stays put before the bitmap loads.
     val aspect = editor.pageAspectRatio(page)
     val borderColor = if (selected || current) palette.accent else palette.border
+
     Column(rowModifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             Modifier
                 .width(150.dp)
                 .height(150.dp * aspect)
+                .alpha(if (isDragging) 0.35f else 1f)
                 .border(if (selected || current) 2.dp else 1.dp, borderColor.toComposeColor())
-                // Tap navigates (or toggles selection in select mode); long-press enters/extends
-                // selection. No drag handling here, so the list scrolls normally.
-                .combinedClickable(
-                    onClick = { if (selecting) editor.togglePageSelection(index) else editor.goToPage(index) },
-                    onLongClick = { editor.togglePageSelection(index) },
-                ),
+                .onGloballyPositioned { onPositioned(it) }
+                .pointerInput(page.uid) {
+                    detectTapGestures(onTap = { tap() })
+                }
+                .pointerInput(page.uid, canDrag) {
+                    if (!canDrag) return@pointerInput
+                    var totalDistance = 0f
+                    var moved = false
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { localOffset ->
+                            totalDistance = 0f
+                            moved = false
+                            dStart(localOffset)
+                        },
+                        onDrag = { _, delta ->
+                            totalDistance += delta.getDistance()
+                            if (totalDistance > touchSlop) moved = true
+                            dMove(delta)
+                        },
+                        onDragEnd = { if (moved) dDrop() else lClick() },
+                        onDragCancel = { dCancel() },
+                    )
+                },
         ) {
-            bitmap?.let { Image(it, contentDescription = stringResource(R.string.page_n, index + 1), modifier = Modifier.fillMaxSize()) }
-
-            if (selected) {
-                Box(Modifier.matchParentSize().background(palette.selectionBackground.withAlpha(77).toComposeColor()))
-                Box(
-                    Modifier.align(Alignment.TopStart).padding(4.dp).size(20.dp)
-                        .clip(CircleShape).background(palette.accent.toComposeColor()),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(XnotesIcons.check, stringResource(R.string.selected), tint = palette.onAccent.toComposeColor(), modifier = Modifier.size(13.dp))
-                }
-            } else if (!selecting) {
-                // Three-dot menu, on a faint scrim so it reads over any thumbnail.
-                Box(Modifier.align(Alignment.TopEnd).padding(2.dp)) {
-                    Tooltip(stringResource(R.string.page_options)) {
-                        Box(
-                            Modifier.size(26.dp).clip(CircleShape)
-                                .background(palette.panel.toComposeColor().copy(alpha = 0.7f))
-                                .clickable { menuOpen = true },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(XnotesIcons.more, stringResource(R.string.page_options), tint = palette.text.toComposeColor(), modifier = Modifier.size(16.dp))
-                        }
-                    }
-                    PageContextMenu(editor, index, menuOpen, { menuOpen = false }, onSharePages, onSavePagesAsPdf, onSavePagesAsImages, onInsertPdf)
-                }
-            }
+            PageThumbBadges(
+                bitmap = bitmap,
+                index = index,
+                selected = selected,
+                selecting = selecting,
+                menuOpen = menuOpen,
+                onMenuOpenChange = { menuOpen = it },
+                editor = editor,
+                onSharePages = onSharePages,
+                onSavePagesAsPdf = onSavePagesAsPdf,
+                onSavePagesAsImages = onSavePagesAsImages,
+                onInsertPdf = onInsertPdf,
+            )
         }
         Text(
             "%02d".format(index + 1),
@@ -255,6 +440,141 @@ private fun PageThumb(
             fontSize = 10.sp,
         )
     }
+}
+
+/** Overlay icons, selection indicator, and context menu inside the thumbnail card. */
+@Composable
+private fun androidx.compose.foundation.layout.BoxScope.PageThumbBadges(
+    bitmap: ImageBitmap?,
+    index: Int,
+    selected: Boolean,
+    selecting: Boolean,
+    menuOpen: Boolean,
+    onMenuOpenChange: (Boolean) -> Unit,
+    editor: Editor,
+    onSharePages: (List<Int>, Boolean) -> Unit,
+    onSavePagesAsPdf: (List<Int>) -> Unit,
+    onSavePagesAsImages: (List<Int>) -> Unit,
+    onInsertPdf: (Int) -> Unit,
+) {
+    val palette = LocalPalette.current
+    bitmap?.let { Image(it, contentDescription = stringResource(R.string.page_n, index + 1), modifier = Modifier.fillMaxSize()) }
+
+    if (selected) {
+        Box(Modifier.matchParentSize().background(palette.selectionBackground.withAlpha(77).toComposeColor()))
+        Box(
+            Modifier.align(Alignment.TopStart).padding(4.dp).size(20.dp)
+                .clip(CircleShape).background(palette.accent.toComposeColor()),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(XnotesIcons.check, stringResource(R.string.selected), tint = palette.onAccent.toComposeColor(), modifier = Modifier.size(13.dp))
+        }
+    } else if (!selecting) {
+        Box(Modifier.align(Alignment.TopEnd).padding(2.dp)) {
+            Tooltip(stringResource(R.string.page_options)) {
+                Box(
+                    Modifier.size(26.dp).clip(CircleShape)
+                        .background(palette.panel.toComposeColor().copy(alpha = 0.7f))
+                        .clickable { onMenuOpenChange(true) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(XnotesIcons.more, stringResource(R.string.page_options), tint = palette.text.toComposeColor(), modifier = Modifier.size(16.dp))
+                }
+            }
+            PageContextMenu(editor, index, menuOpen, { onMenuOpenChange(false) }, onSharePages, onSavePagesAsPdf, onSavePagesAsImages, onInsertPdf)
+        }
+    }
+}
+
+/** Visual drop target line shown where a dragged page will land in the rail. */
+@Composable
+private fun DropIndicatorLine(modifier: Modifier = Modifier) {
+    val palette = LocalPalette.current
+    Box(
+        modifier
+            .width(150.dp)
+            .height(3.dp)
+            .clip(RoundedCornerShape(1.5.dp))
+            .background(palette.accent.toComposeColor())
+    )
+}
+
+/** Floating thumbnail tracking the user's finger during a page reorder drag. */
+@Composable
+private fun PageDragGhost(
+    editor: Editor,
+    page: Page,
+    index: Int,
+    modifier: Modifier = Modifier,
+) {
+    val palette = LocalPalette.current
+    val aspect = editor.pageAspectRatio(page)
+    val bitmap = editor.cachedPageThumbnail(page)
+    Box(
+        modifier
+            .zIndex(10f)
+            .width(150.dp)
+            .height(150.dp * aspect)
+            .shadow(10.dp, RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(6.dp))
+            .background(palette.panel.toComposeColor())
+            .border(2.dp, palette.accent.toComposeColor(), RoundedCornerShape(6.dp))
+            .alpha(0.9f),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (bitmap != null) {
+            Image(bitmap, contentDescription = null, modifier = Modifier.fillMaxSize())
+        } else {
+            Text(
+                "%02d".format(index + 1),
+                color = palette.accent.toComposeColor(),
+                fontSize = 16.sp,
+            )
+        }
+    }
+}
+
+/**
+ * Computes the target page index when moving a page from [fromIndex] to insertion [dropSlot].
+ *
+ * Slot 0 is before page 0, slot k is between pages k-1 and k, and slot N is after the last page.
+ * Moving to adjacent slots (same position) returns [fromIndex] as a no-op.
+ * Target is clamped within [0, totalItems - 1].
+ */
+internal fun calculateTargetIndex(fromIndex: Int, dropSlot: Int, totalItems: Int): Int {
+    if (totalItems <= 1) return 0
+    val rawTarget = if (dropSlot > fromIndex) dropSlot - 1 else dropSlot
+    return rawTarget.coerceIn(0, totalItems - 1)
+}
+
+/**
+ * Computes the insertion slot (0..totalItems) given the finger Y position relative to the
+ * LazyColumn viewport, list of visible item bounds, and total number of items.
+ */
+internal fun calculateDropSlot(
+    fingerY: Float,
+    visibleItems: List<LazyListItemInfo>,
+    totalItems: Int,
+): Int {
+    if (visibleItems.isEmpty() || totalItems <= 0) return 0
+    val first = visibleItems.first()
+    if (fingerY < first.offset + first.size / 2f) {
+        return first.index.coerceIn(0, totalItems)
+    }
+    val last = visibleItems.last()
+    if (fingerY >= last.offset + last.size / 2f) {
+        return (last.index + 1).coerceIn(0, totalItems)
+    }
+    for (i in 0 until visibleItems.size - 1) {
+        val curr = visibleItems[i]
+        val next = visibleItems[i + 1]
+        val currMid = curr.offset + curr.size / 2f
+        val nextMid = next.offset + next.size / 2f
+        if (fingerY in currMid..nextMid) {
+            return next.index.coerceIn(0, totalItems)
+        }
+    }
+    return totalItems
 }
 
 /** Page sub-pages of the three-dot menu (main / share-format / save-format). */

@@ -27,6 +27,7 @@ import com.xnotes.core.history.RemoveMarkup
 import com.xnotes.core.history.ReplaceMarkup
 import com.xnotes.core.history.CompositeCommand
 import com.xnotes.core.history.DeletePage
+import com.xnotes.core.history.MovePage
 import com.xnotes.core.history.EraseItems
 import com.xnotes.core.history.History
 import com.xnotes.core.model.Bookmark
@@ -2748,7 +2749,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         return com.xnotes.core.geometry.Rect(-i.left, -i.top, i.left + page.width + i.right, i.top + page.height + i.bottom)
     }
 
-    private fun refreshContent() {
+    private fun refreshContent(preserveThumbnails: Boolean = false) {
         republishFlowIfStale()
         canUndo = history.canUndo
         canRedo = history.canRedo
@@ -2756,6 +2757,9 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         dirty = state.document.dirty
         title = state.document.title
         contentVersion++
+        if (preserveThumbnails) {
+            pageThumbsVersion = contentVersion
+        }
         refreshView()
         refreshSearch()
         if (autosaveUri != null && state.document.dirty) scheduleAutosave()
@@ -5640,12 +5644,16 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         if (controller.isEditingLabel) controller.commitTextEdit() // and so is a label being typed
         val command = history.nextUndo
         val pagesBefore = state.document.pages.size
+        val activePageBefore = state.document.pages.getOrNull(state.currentPageIndex())
         val was = touchedRegions(command)
         history.undo()
         bakeMarkups(command)
+        val isStructural = state.document.pages.size != pagesBefore || command?.isStructural == true
         afterHistory(
-            structural = state.document.pages.size != pagesBefore,
+            structural = isStructural,
             regions = spanning(was, touchedRegions(command)),
+            activePageBefore = activePageBefore,
+            preserveThumbnails = command is MovePage,
         )
     }
 
@@ -5654,12 +5662,16 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         if (controller.isEditingLabel) controller.commitTextEdit()
         val command = history.nextRedo
         val pagesBefore = state.document.pages.size
+        val activePageBefore = state.document.pages.getOrNull(state.currentPageIndex())
         val was = touchedRegions(command)
         history.redo()
         bakeMarkups(command)
+        val isStructural = state.document.pages.size != pagesBefore || command?.isStructural == true
         afterHistory(
-            structural = state.document.pages.size != pagesBefore,
+            structural = isStructural,
             regions = spanning(was, touchedRegions(command)),
+            activePageBefore = activePageBefore,
+            preserveThumbnails = command is MovePage,
         )
     }
 
@@ -5713,15 +5725,30 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         }
     }
 
-    private fun afterHistory(structural: Boolean, regions: List<Pair<Page, Rect>>?) {
+    private fun afterHistory(
+        structural: Boolean,
+        regions: List<Pair<Page, Rect>>?,
+        activePageBefore: Page? = null,
+        preserveThumbnails: Boolean = false,
+    ) {
         controller.clearSelection()
-        if (structural) state.relayout() // page add/remove shifts layout; page-keyed caches survive
+        if (structural) {
+            state.relayout() // page add/remove/move shifts layout; page-keyed caches survive
+            val newIndex = if (activePageBefore != null) {
+                state.document.pages.indexOfFirst { it === activePageBefore }
+            } else {
+                -1
+            }
+            if (newIndex >= 0 && newIndex != state.currentPageIndex()) {
+                state.goToPage(newIndex)
+            }
+        }
         // The in-place repaint below reads the published flow snapshot: republish it first
         // so an undone/redone flow edit repaints at its post-history layout.
         republishFlowIfStale()
         // Repair the ink caches rather than dropping them — dropping blanked every visible page to
-        // bare paper for a frame (the undo/redo flicker). Only AddPage/DeletePage change the page
-        // set, so relayout (which re-renders the sharp viewport) is gated on that. A command that
+        // bare paper for a frame (the undo/redo flicker). Only AddPage/DeletePage/MovePage change the page
+        // set/order, so relayout (which re-renders the sharp viewport) is gated on that. A command that
         // named its regions repairs just those, here and now; one that couldn't hands every cached
         // page to the cache thread instead, because repainting them all inline is a stall long
         // enough to time out input on a dense note.
@@ -5729,7 +5756,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         if (flowText.active) flowInput.reconcile() // undone/redone text must reach the IME mirror
         state.document.dirty = true
         state.clampScroll()
-        refreshContent()
+        refreshContent(preserveThumbnails = preserveThumbnails)
         view.requestRender()
     }
 
@@ -5839,6 +5866,43 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     /** Insert a blank page right after [index] (sized from it) and reveal it. */
     fun insertPageAfter(index: Int) {
         goToPage(insertBlankPageAt(index + 1, index))
+    }
+
+    /**
+     * Move the page at [fromIndex] to [toIndex].
+     * Undoable; relayouts, preserves the active page, keeps thumbnail cache intact, and requests render.
+     * Returns true if moved, false if indices were invalid or identical.
+     */
+    fun movePage(fromIndex: Int, toIndex: Int): Boolean {
+        val pages = state.document.pages
+        if (fromIndex !in pages.indices || toIndex !in pages.indices || fromIndex == toIndex) {
+            return false
+        }
+        val page = pages[fromIndex]
+        val activePageBefore = state.document.pages.getOrNull(state.currentPageIndex())
+
+        controller.clearSelection()
+        val moved = state.document.movePage(fromIndex, toIndex)
+        if (!moved) return false
+
+        history.push(MovePage(state.document, page, fromIndex, toIndex))
+        state.document.dirty = true
+        state.relayout()
+
+        val newIndex = if (activePageBefore != null) {
+            state.document.pages.indexOfFirst { it === activePageBefore }
+        } else {
+            -1
+        }
+        if (newIndex >= 0 && newIndex != state.currentPageIndex()) {
+            goToPage(newIndex)
+        } else {
+            state.clampScroll()
+            afterView()
+        }
+        refreshContent(preserveThumbnails = true)
+        view.requestRender()
+        return true
     }
 
     /** A PDF joined onto the note's source: the source to keep, where its pages start in it, and their sizes. */

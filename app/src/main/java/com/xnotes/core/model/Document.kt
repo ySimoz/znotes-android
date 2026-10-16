@@ -50,6 +50,9 @@ class Document(
 
     val hasPdf: Boolean get() = pdfFile != null
 
+    /** Number of pages in the document. */
+    val pageCount: Int get() = pages.size
+
     /**
      * Appends a blank page sized [width] × [height] and marks the document
      * dirty. The UI passes the current page's dimensions so a note stays uniform.
@@ -61,8 +64,41 @@ class Document(
         return page
     }
 
+    /**
+     * Moves the page at [fromIndex] to [toIndex] and marks the document dirty.
+     * Bookmarks pointing to affected pages have their page index updated so they
+     * remain attached to the same pages.
+     *
+     * Returns true if moved, or false if indices are invalid or identical.
+     */
+    fun movePage(fromIndex: Int, toIndex: Int): Boolean {
+        if (fromIndex !in pages.indices || toIndex !in pages.indices || fromIndex == toIndex) {
+            return false
+        }
+
+        val page = pages.removeAt(fromIndex)
+        pages.add(toIndex, page)
+
+        for (bookmark in bookmarks) {
+            bookmark.page = reorderedIndex(bookmark.page, fromIndex, toIndex)
+        }
+
+        dirty = true
+        return true
+    }
+
     companion object {
         const val DEFAULT_NEW_PAGES = 1
+
+        /**
+         * Computes the new index of [currentIndex] after an item is moved from [fromIndex] to [toIndex].
+         */
+        fun reorderedIndex(currentIndex: Int, fromIndex: Int, toIndex: Int): Int = when {
+            currentIndex == fromIndex -> toIndex
+            fromIndex < currentIndex && toIndex >= currentIndex -> currentIndex - 1
+            fromIndex > currentIndex && toIndex <= currentIndex -> currentIndex + 1
+            else -> currentIndex
+        }
 
         /** A blank document of [count] pages of the given size/orientation. */
         fun blank(

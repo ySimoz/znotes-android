@@ -37,6 +37,12 @@ interface Command {
     fun touched(locate: (CanvasItem) -> Page?): List<Pair<Page, CanvasItem>>? = null
 
     /**
+     * Whether this command alters document page structure (add, delete, reorder),
+     * requiring page relayout and active page reconciliation on undo/redo.
+     */
+    val isStructural: Boolean get() = false
+
+    /**
      * The markups this command's undo/redo puts on or takes off, each with its page, so the view
      * repaints the page backgrounds just where they lie. Markups are immutable, so a restyle names
      * the old and the new one.
@@ -321,6 +327,8 @@ class AddPage(
     private val page: Page,
     private val index: Int,
 ) : Command {
+    override val isStructural: Boolean get() = true
+
     override fun redo() {
         if (!document.pages.containsRef(page)) {
             document.pages.add(index.coerceIn(0, document.pages.size), page)
@@ -334,6 +342,8 @@ class AddPage(
 
 /** Several commands applied as one undoable unit: redo in order, undo in reverse. */
 class CompositeCommand(private val commands: List<Command>) : Command {
+    override val isStructural: Boolean get() = commands.any { it.isStructural }
+
     override fun redo() {
         for (c in commands) c.redo()
     }
@@ -358,6 +368,8 @@ class DeletePage(
     private val page: Page,
     private val index: Int,
 ) : Command {
+    override val isStructural: Boolean get() = true
+
     override fun redo() {
         document.pages.removeRef(page)
     }
@@ -365,6 +377,37 @@ class DeletePage(
     override fun undo() {
         if (!document.pages.containsRef(page)) {
             document.pages.add(index.coerceIn(0, document.pages.size), page)
+        }
+    }
+}
+
+/** Move a page from [fromIndex] to [toIndex]. */
+class MovePage(
+    private val document: Document,
+    private val page: Page,
+    val fromIndex: Int,
+    val toIndex: Int,
+    private val onPageMoved: ((targetIndex: Int) -> Unit)? = null,
+) : Command {
+    override val isStructural: Boolean get() = true
+
+    override fun redo() {
+        val current = document.pages.indexOfFirst { it === page }
+        if (current >= 0 && current != toIndex) {
+            val target = toIndex.coerceIn(0, document.pages.lastIndex)
+            if (document.movePage(current, target)) {
+                onPageMoved?.invoke(target)
+            }
+        }
+    }
+
+    override fun undo() {
+        val current = document.pages.indexOfFirst { it === page }
+        if (current >= 0 && current != fromIndex) {
+            val target = fromIndex.coerceIn(0, document.pages.lastIndex)
+            if (document.movePage(current, target)) {
+                onPageMoved?.invoke(target)
+            }
         }
     }
 }

@@ -13,6 +13,7 @@ import com.xnotes.core.text.TableDefaults
 import com.xnotes.core.text.TableStyle
 import com.xnotes.core.tools.EraseMode
 import com.xnotes.core.tools.InkPalette
+import com.xnotes.core.tools.LassoMode
 import com.xnotes.core.tools.MarkupMode
 import com.xnotes.core.tools.ShapeConfig
 import com.xnotes.core.shapes.ShapeKind
@@ -339,6 +340,7 @@ data class Settings(
             .put("dash_length", c.dashLength)
             .put("dash_gap", c.dashGap)
             .put("erase_mode", c.eraseMode.id)
+            .put("lasso_mode", c.lassoMode.id)
             .put("switch_back_after_erase", c.switchBackAfterErase)
             .put("erase_markups", c.eraseMarkups)
             .put("scribble_erase", c.scribbleErase)
@@ -368,6 +370,7 @@ data class Settings(
                 dashLength = o.optDouble("dash_length", d.dashLength),
                 dashGap = o.optDouble("dash_gap", d.dashGap),
                 eraseMode = EraseMode.fromId(o.optString("erase_mode", d.eraseMode.id)),
+                lassoMode = LassoMode.fromId(o.optString("lasso_mode", d.lassoMode.id)),
                 switchBackAfterErase = o.optBoolean("switch_back_after_erase", d.switchBackAfterErase),
                 eraseMarkups = o.optBoolean("erase_markups", d.eraseMarkups),
                 scribbleErase = o.optBoolean("scribble_erase", d.scribbleErase),

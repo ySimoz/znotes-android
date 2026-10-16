@@ -655,7 +655,12 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             it.pad.frontBuffering = !settings.prefs.disableFrontBuffering
             it.pickColor(activeColorIndex)
             // A style tuned on the canvas is the same style, so it persists through this editor.
-            it.onToolStyleChanged = { settingsDirty = true }
+            it.onToolStyleChanged = {
+                settingsDirty = true
+                val tools = ToolDefaults.persistedTools.associateWith { t -> it.toolConfig(t) }
+                settings = settings.copy(tools = tools)
+                saveSettingsSoon()
+            }
             it.onSwatchColorChanged = { index, color -> adoptSwatchColor(index, color) }
             it.onSwatchRecolored = { index, color ->
                 recolorSwatch(index, color)
@@ -5632,7 +5637,10 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     override val hostHasPdf: Boolean get() = hasPdf
 
     override fun updateToolConfig(tool: Tool, config: com.xnotes.core.tools.ToolConfig) {
-        controller.setToolConfig(tool, config.copy(rgba = controller.inkColor))
+        val stored = config.copy(rgba = controller.inkColor)
+        controller.setToolConfig(tool, stored)
+        settings = settings.copy(tools = settings.tools + (tool to stored))
+        saveSettingsSoon()
     }
 
     val recentColors: List<Rgba> get() = settings.recentColors

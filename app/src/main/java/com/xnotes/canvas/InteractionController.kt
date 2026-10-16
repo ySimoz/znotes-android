@@ -66,6 +66,7 @@ import com.xnotes.core.stroke.ShapeRecognizer
 import com.xnotes.core.stroke.StrokeSimplify
 import com.xnotes.core.tools.EraseMode
 import com.xnotes.core.tools.InkPalette
+import com.xnotes.core.tools.LassoMode
 import com.xnotes.core.tools.ShapeConfig
 import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.tools.MarkupMode
@@ -1779,13 +1780,42 @@ class InteractionController(
     private fun endLasso() {
         if (lassoPoints.size >= 3) {
             val drawable = state.drawablePageRange()
-            val members = SelectionMath.lassoMembers(state.document.pages, state.pageRects, lassoPoints) { i, p ->
-                state.toPageSpace(i, p)
-            }.filter { it.pageIndex in drawable } // hidden paginated neighbours don't select
-            if (members.isEmpty()) {
-                clearSelection()
+            if (configFor(Tool.LASSO).lassoMode == LassoMode.EXACT) {
+                val paged = LassoSelection.selectExact(state.document.pages, state.pageRects, lassoPoints) { i, p ->
+                    state.toPageSpace(i, p)
+                }
+                val members = paged.selected.filter { it.pageIndex in drawable }
+                val cmds = ArrayList<Command>()
+                for (pageSplit in paged.splits.filter { it.pageIndex in drawable }) {
+                    val page = state.document.pages[pageSplit.pageIndex]
+                    val before = page.items.toList()
+                    val idx = page.items.indexOfFirst { it === pageSplit.original }
+                    if (idx >= 0) {
+                        val allFrags = pageSplit.outside + pageSplit.inside
+                        page.items.removeAt(idx)
+                        page.items.addAll(idx, allFrags)
+                        cmds.add(ReplacePageItems(page, before, page.items.toList()))
+                    }
+                }
+                if (cmds.isNotEmpty()) {
+                    history.push(cmds.singleOrNull() ?: CompositeCommand(cmds))
+                    state.document.dirty = true
+                    onContentChanged()
+                }
+                if (members.isEmpty()) {
+                    clearSelection()
+                } else {
+                    setSelection(members)
+                }
             } else {
-                setSelection(members)
+                val members = SelectionMath.lassoMembers(state.document.pages, state.pageRects, lassoPoints) { i, p ->
+                    state.toPageSpace(i, p)
+                }.filter { it.pageIndex in drawable } // hidden paginated neighbours don't select
+                if (members.isEmpty()) {
+                    clearSelection()
+                } else {
+                    setSelection(members)
+                }
             }
         } else {
             clearSelection()

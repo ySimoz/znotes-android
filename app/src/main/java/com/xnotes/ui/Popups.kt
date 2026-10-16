@@ -58,6 +58,7 @@ import com.xnotes.core.model.PageStyle
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.pal.FontFace
 import com.xnotes.core.tools.EraseMode
+import com.xnotes.core.tools.LassoMode
 import com.xnotes.core.tools.MarkupMode
 import com.xnotes.core.tools.ShapeConfig
 import com.xnotes.core.shapes.ShapeKind
@@ -888,6 +889,33 @@ fun SelectConfigPopup(editor: ToolPopupHost, onDismiss: () -> Unit) {
             // Re-arm the previous pen/highlighter once a selection action (move, resize, delete,
             // cut, copy, duplicate) finishes, so a quick edit doesn't strand you in select.
             ToggleRow(stringResource(R.string.caption_switch_back), switchBack) { switchBack = it; emit() }
+        }
+    }
+}
+
+/** Lasso selection configuration popup: SNAP (whole strokes) or EXACT (pixel-perfect split). */
+@Composable
+fun LassoConfigPopup(editor: ToolPopupHost, onDismiss: () -> Unit) {
+    val base = remember { editor.toolConfig(Tool.LASSO) }
+    var mode by remember { mutableStateOf(base.lassoMode) }
+
+    fun selectMode(next: LassoMode) {
+        if (mode == next) return
+        mode = next
+        editor.updateToolConfig(Tool.LASSO, base.copy(lassoMode = next))
+    }
+
+    DropdownMenu(expanded = true, onDismissRequest = onDismiss) {
+        Column(Modifier.width(250.dp).padding(horizontal = 14.dp, vertical = 8.dp)) {
+            PopupTitle(stringResource(R.string.title_lasso))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                ModeChip(stringResource(R.string.lasso_snap), selected = mode == LassoMode.SNAP) {
+                    selectMode(LassoMode.SNAP)
+                }
+                ModeChip(stringResource(R.string.lasso_exact), selected = mode == LassoMode.EXACT) {
+                    selectMode(LassoMode.EXACT)
+                }
+            }
         }
     }
 }

@@ -36,6 +36,7 @@ import com.xnotes.core.stroke.ShapeRecognizer
 import com.xnotes.core.stroke.StrokeSimplify
 import com.xnotes.core.tools.EraseMode
 import com.xnotes.core.tools.InkPalette
+import com.xnotes.core.tools.LassoMode
 import com.xnotes.core.tools.ShapeConfig
 import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.tools.Tool
@@ -1079,7 +1080,12 @@ class InfiniteInteraction(
         val sel = selection()
         if (sel != null && lassoPoints.size >= 3) {
             val bounds = Rect.bounding(lassoPoints)
-            sel.select(SelectionMath.lassoMembers(itemsIn(bounds), lassoPoints.toList()))
+            if (configFor(Tool.LASSO).lassoMode == LassoMode.EXACT) {
+                val cmd = sel.selectExact(itemsIn(bounds), lassoPoints.toList())
+                if (cmd != null) onCommitSelection(cmd)
+            } else {
+                sel.select(SelectionMath.lassoMembers(itemsIn(bounds), lassoPoints.toList()))
+            }
         }
         lassoPoints.clear()
         onSelectionChanged()

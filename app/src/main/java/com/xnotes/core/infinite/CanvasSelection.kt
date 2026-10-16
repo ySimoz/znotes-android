@@ -1,6 +1,7 @@
 package com.xnotes.core.infinite
 
 import com.xnotes.canvas.HandleId
+import com.xnotes.canvas.LassoSelection
 import com.xnotes.canvas.ResizeHandle
 import com.xnotes.canvas.ResizeMath
 import com.xnotes.core.geometry.Affine
@@ -58,6 +59,27 @@ class CanvasSelection(private val doc: InfiniteDocument) {
     fun select(next: List<CanvasItem>) {
         items = next
         box = boxOf(next)
+    }
+
+    /**
+     * Exact lasso selection: splits crossing strokes into inside and outside fragments,
+     * updates the document in-place, selects the inside items, and returns the undoable command.
+     */
+    fun selectExact(candidates: List<CanvasItem>, polygon: List<Pt>): Command? {
+        val result = LassoSelection.selectExact(candidates, polygon)
+        val cmd = if (result.splits.isNotEmpty()) {
+            val splitsForCmd = ArrayList<SplitCanvasItems.Split>()
+            for (s in result.splits) {
+                val allFragments = s.outside + s.inside
+                val at = doc.replaceItem(s.original, allFragments)
+                if (at >= 0) {
+                    splitsForCmd.add(SplitCanvasItems.Split(at, s.original, allFragments))
+                }
+            }
+            if (splitsForCmd.isNotEmpty()) SplitCanvasItems(doc, splitsForCmd) else null
+        } else null
+        select(result.selected)
+        return cmd
     }
 
     fun clear() {

@@ -29,6 +29,20 @@ enum class MarkupMode(val id: String, val type: com.xnotes.core.model.MarkupType
 }
 
 /**
+ * Lasso selection behaviour: SNAP selects entire strokes on contact;
+ * EXACT (pixel-perfect) splits crossing strokes so only the portion
+ * inside the lasso polygon is selected.
+ */
+enum class LassoMode(val id: String) {
+    SNAP("snap"),
+    EXACT("exact");
+
+    companion object {
+        fun fromId(id: String?): LassoMode = entries.firstOrNull { it.id == id } ?: SNAP
+    }
+}
+
+/**
  * The style record carried by stroke tools and used as the eraser/lasso size
  * carrier (spec 04 §2). A [com.xnotes.core.model.Stroke] stores a **copy** at
  * pen-down so re-tuning a tool never restyles existing strokes.
@@ -92,6 +106,8 @@ data class ToolConfig(
     val eraseMarkups: Boolean = true,
     /** Eraser: a pen scribbled over ink erases what it touches. Only used by [Tool.ERASER]. */
     val scribbleErase: Boolean = true,
+    /** Lasso selection behaviour: whole stroke (SNAP) or pixel-perfect split (EXACT). Only [Tool.LASSO]. */
+    val lassoMode: LassoMode = LassoMode.SNAP,
 ) {
     companion object {
         const val DEFAULT_MARKUP_INTENSITY = 0.5

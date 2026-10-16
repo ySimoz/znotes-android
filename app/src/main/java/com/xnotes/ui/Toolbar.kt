@@ -283,7 +283,7 @@ private fun ToolButton(
 ) {
     if (icon == null) return
     val armed = editor.tool == tool
-    val configurable = tool.isStroke || tool == Tool.SHAPE || tool == Tool.ERASER || tool == Tool.SELECT || tool == Tool.TEXT || tool == Tool.MARKUP
+    val configurable = tool.isStroke || tool == Tool.SHAPE || tool == Tool.ERASER || tool == Tool.SELECT || tool == Tool.TEXT || tool == Tool.MARKUP || tool == Tool.LASSO
     Box {
         ToolbarIcon(
             icon,
@@ -305,6 +305,7 @@ private fun ToolButton(
                 tool == Tool.SHAPE -> ShapeConfigPopup(editor) { setConfigForTool(null) }
                 tool == Tool.ERASER -> EraserConfigPopup(editor) { setConfigForTool(null) }
                 tool == Tool.SELECT -> SelectConfigPopup(editor) { setConfigForTool(null) }
+                tool == Tool.LASSO -> LassoConfigPopup(editor) { setConfigForTool(null) }
                 tool == Tool.TEXT -> TextToolConfigPopup(editor) { setConfigForTool(null) }
                 tool == Tool.MARKUP -> MarkupToolPopup(editor) { setConfigForTool(null) }
                 else -> ToolConfigPopup(editor, tool) { setConfigForTool(null) }

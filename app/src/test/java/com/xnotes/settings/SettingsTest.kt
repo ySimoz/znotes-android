@@ -92,6 +92,16 @@ class SettingsTest {
         assertEquals(1.0, Settings.fromJson(wild).configFor(Tool.MARKUP).markupIntensity, 1e-9)
     }
 
+    @Test fun theLassoModeRoundTrips() {
+        assertEquals(com.xnotes.core.tools.LassoMode.SNAP, Settings().configFor(Tool.LASSO).lassoMode)
+        val exact = Settings().configFor(Tool.LASSO).copy(lassoMode = com.xnotes.core.tools.LassoMode.EXACT)
+        val json = Settings(tools = mapOf(Tool.LASSO to exact)).toJson()
+        assertEquals(com.xnotes.core.tools.LassoMode.EXACT, Settings.fromJson(json).configFor(Tool.LASSO).lassoMode)
+        // Missing lasso_mode falls back to SNAP
+        json.getJSONObject("tools").getJSONObject("lasso").remove("lasso_mode")
+        assertEquals(com.xnotes.core.tools.LassoMode.SNAP, Settings.fromJson(json).configFor(Tool.LASSO).lassoMode)
+    }
+
     @Test fun theEraserTakesTextMarkupsUnlessSwitchedOff() {
         assertTrue(Settings().configFor(Tool.ERASER).eraseMarkups)
         val off = Settings().configFor(Tool.ERASER).copy(eraseMarkups = false)

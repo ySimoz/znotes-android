@@ -47,6 +47,22 @@ class History(private val limit: Int = DEFAULT_LIMIT) {
         redoStack.clear()
     }
 
+    /** Swap the entire undo/redo command state with [other] in-memory without breaking references. */
+    fun replaceWith(other: History) {
+        undoStack.clear()
+        redoStack.clear()
+        undoStack.addAll(other.undoStack)
+        redoStack.addAll(other.redoStack)
+    }
+
+    /** Copy current undo/redo commands to [target]. */
+    fun copyTo(target: History) {
+        target.undoStack.clear()
+        target.redoStack.clear()
+        target.undoStack.addAll(undoStack)
+        target.redoStack.addAll(redoStack)
+    }
+
     companion object {
         /** Deep enough that no one undoes past it in practice, shallow enough to bound the heap. */
         const val DEFAULT_LIMIT = 200

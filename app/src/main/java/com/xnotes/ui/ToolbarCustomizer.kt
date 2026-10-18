@@ -36,7 +36,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
@@ -66,9 +66,9 @@ fun ToolbarCustomizerBody(
     dropTarget: Pair<Int, Int>?,
     dragSection: Int?,
     sectionDropTarget: Int?,
-    chipBounds: MutableMap<ToolbarItem, Rect>,
-    sectionBounds: MutableMap<Int, Rect>,
-    sectionGrabBounds: MutableMap<Int, Rect>,
+    chipCoords: MutableMap<ToolbarItem, androidx.compose.ui.layout.LayoutCoordinates>,
+    sectionCoords: MutableMap<Int, androidx.compose.ui.layout.LayoutCoordinates>,
+    sectionGrabCoords: MutableMap<Int, androidx.compose.ui.layout.LayoutCoordinates>,
     onToggle: (Int, Int) -> Unit,
     onDelete: (Int) -> Unit,
     onAdd: () -> Unit,
@@ -84,6 +84,7 @@ fun ToolbarCustomizerBody(
     val palette = LocalPalette.current
     val dragging = dragItem != null
     val draggingSection = dragSection != null
+    val dragActive = dragging || draggingSection
     FlowRow(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -96,12 +97,13 @@ fun ToolbarCustomizerBody(
                 targeted = dragging && dropTarget?.first == sec,
                 dimmed = dragSection == sec,
                 onDelete = { onDelete(sec) },
-                onBounds = { sectionBounds[sec] = it },
-                onGrabBounds = { sectionGrabBounds[sec] = it },
+                onCoords = { sectionCoords[sec] = it },
+                onGrabCoords = { sectionGrabCoords[sec] = it },
                 onGrabDragStart = { onSectionDragStart(sec, it) },
                 onGrabDrag = onSectionDrag,
                 onGrabDrop = onSectionDrop,
                 onGrabCancel = onSectionCancel,
+                dragActive = dragActive,
             ) {
                 if (section.entries.isEmpty()) {
                     Text(
@@ -126,7 +128,8 @@ fun ToolbarCustomizerBody(
                                 onDrag = onDrag,
                                 onDrop = onDrop,
                                 onCancel = onCancel,
-                                onBounds = { chipBounds[entry.item] = it },
+                                onCoords = { chipCoords[entry.item] = it },
+                                dragActive = dragActive,
                             )
                         }
                         if (dragging && dropTarget == sec to section.entries.size) InsertionCaret()
@@ -140,6 +143,85 @@ fun ToolbarCustomizerBody(
 }
 
 /**
+ * A single section card for granular virtualization inside a LazyColumn.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ToolbarSectionCard(
+    sec: Int,
+    layout: ToolbarLayout,
+    dragItem: ToolbarItem?,
+    dropTarget: Pair<Int, Int>?,
+    dragSection: Int?,
+    sectionDropTarget: Int?,
+    chipCoords: MutableMap<ToolbarItem, androidx.compose.ui.layout.LayoutCoordinates>,
+    sectionCoords: MutableMap<Int, androidx.compose.ui.layout.LayoutCoordinates>,
+    sectionGrabCoords: MutableMap<Int, androidx.compose.ui.layout.LayoutCoordinates>,
+    onApplyEdited: (ToolbarLayout) -> Unit,
+    onStartItemDrag: (ToolbarItem, Offset) -> Unit,
+    onMoveItemDrag: (Offset) -> Unit,
+    onDropItem: () -> Unit,
+    onStartSectionDrag: (Int, Offset) -> Unit,
+    onMoveSectionDrag: (Offset) -> Unit,
+    onDropSection: () -> Unit,
+    onClearDrag: () -> Unit,
+) {
+    val palette = LocalPalette.current
+    val dragging = dragItem != null
+    val draggingSection = dragSection != null
+    val section = layout.sections.getOrNull(sec) ?: return
+    val dragActive = dragging || draggingSection
+
+    Column {
+        if (draggingSection && sectionDropTarget == sec) SectionCaret()
+        SectionCard(
+            canDelete = layout.sections.size > 1,
+            targeted = dragging && dropTarget?.first == sec,
+            dimmed = dragSection == sec,
+            onDelete = { onApplyEdited(layout.removeSection(sec)) },
+            onCoords = { sectionCoords[sec] = it },
+            onGrabCoords = { sectionGrabCoords[sec] = it },
+            onGrabDragStart = { onStartSectionDrag(sec, it) },
+            onGrabDrag = onMoveSectionDrag,
+            onGrabDrop = onDropSection,
+            onGrabCancel = onClearDrag,
+            dragActive = dragActive,
+        ) {
+            if (section.entries.isEmpty()) {
+                Text(
+                    stringResource(R.string.drop_here),
+                    color = (if (dragging && dropTarget == sec to 0) palette.accent else palette.textDim).toComposeColor(),
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                )
+            } else {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    section.entries.forEachIndexed { idx, entry ->
+                        if (dragging && dropTarget == sec to idx) InsertionCaret()
+                        ChipCell(
+                            item = entry.item,
+                            visible = entry.visible,
+                            dragging = dragItem == entry.item,
+                            onTap = { onApplyEdited(layout.toggleVisible(sec, idx)) },
+                            onDragStart = { local -> onStartItemDrag(entry.item, local) },
+                            onDrag = onMoveItemDrag,
+                            onDrop = onDropItem,
+                            onCancel = onClearDrag,
+                            onCoords = { chipCoords[entry.item] = it },
+                            dragActive = dragActive,
+                        )
+                    }
+                    if (dragging && dropTarget == sec to section.entries.size) InsertionCaret()
+                }
+            }
+        }
+    }
+}
+
+/**
  * Resolve the drop slot (sectionIndex, entryIndex) for a finger position in root coordinates. The
  * section is the card the finger is inside, else the nearest card. Within it, the first chip the
  * finger sits "before" (an earlier row, or left of its centre on the same row) wins; an empty card
@@ -148,14 +230,19 @@ fun ToolbarCustomizerBody(
 internal fun toolbarDropTarget(
     layout: ToolbarLayout,
     finger: Offset,
-    chipBounds: Map<ToolbarItem, Rect>,
-    sectionBounds: Map<Int, Rect>,
+    chipCoords: Map<ToolbarItem, androidx.compose.ui.layout.LayoutCoordinates>,
+    sectionCoords: Map<Int, androidx.compose.ui.layout.LayoutCoordinates>,
 ): Pair<Int, Int>? {
-    var sec = layout.sections.indices.firstOrNull { sectionBounds[it]?.contains(finger) == true } ?: -1
+    var sec = layout.sections.indices.firstOrNull {
+        val c = sectionCoords[it]
+        c != null && c.isAttached && c.boundsInRoot().contains(finger)
+    } ?: -1
     if (sec < 0) {
         var best = Float.MAX_VALUE
         for (i in layout.sections.indices) {
-            val r = sectionBounds[i] ?: continue
+            val c = sectionCoords[i] ?: continue
+            if (!c.isAttached) continue
+            val r = c.boundsInRoot()
             val dx = maxOf(r.left - finger.x, 0f, finger.x - r.right)
             val dy = maxOf(r.top - finger.y, 0f, finger.y - r.bottom)
             val d = dx * dx + dy * dy
@@ -167,7 +254,9 @@ internal fun toolbarDropTarget(
     if (entries.isEmpty()) return sec to 0
     fun before(r: Rect): Boolean = finger.y < r.top || (finger.y <= r.bottom && finger.x < r.center.x)
     for (idx in entries.indices) {
-        val r = chipBounds[entries[idx].item] ?: continue
+        val c = chipCoords[entries[idx].item] ?: continue
+        if (!c.isAttached) continue
+        val r = c.boundsInRoot()
         if (before(r)) return sec to idx
     }
     return sec to entries.size
@@ -177,15 +266,20 @@ internal fun toolbarDropTarget(
 internal fun toolbarSectionDropTarget(
     layout: ToolbarLayout,
     finger: Offset,
-    sectionBounds: Map<Int, Rect>,
+    sectionCoords: Map<Int, androidx.compose.ui.layout.LayoutCoordinates>,
 ): Int {
     fun before(r: Rect): Boolean = finger.y < r.top || (finger.y <= r.bottom && finger.x < r.center.x)
     for (sec in layout.sections.indices) {
-        val r = sectionBounds[sec] ?: continue
+        val c = sectionCoords[sec] ?: continue
+        if (!c.isAttached) continue
+        val r = c.boundsInRoot()
         if (before(r)) return sec
     }
     return layout.sections.size
 }
+
+/** Lightweight coordinates holder to avoid continuous map writes during scrolling. */
+private class CoordsHolder(var coords: androidx.compose.ui.layout.LayoutCoordinates? = null)
 
 /**
  * A bordered section box: a header strip (grab area for the section drag) with the delete X at its
@@ -198,25 +292,23 @@ private fun SectionCard(
     targeted: Boolean,
     dimmed: Boolean,
     onDelete: () -> Unit,
-    onBounds: (Rect) -> Unit,
-    onGrabBounds: (Rect) -> Unit,
+    onCoords: (androidx.compose.ui.layout.LayoutCoordinates) -> Unit,
+    onGrabCoords: (androidx.compose.ui.layout.LayoutCoordinates) -> Unit,
     onGrabDragStart: (Offset) -> Unit,
     onGrabDrag: (Offset) -> Unit,
     onGrabDrop: () -> Unit,
     onGrabCancel: () -> Unit,
+    dragActive: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val palette = LocalPalette.current
-    val lastBounds = remember { arrayOfNulls<Rect>(1) }
+    val holder = remember { CoordsHolder() }
     SectionCardScaffold(
         modifier = Modifier
             .alpha(if (dimmed) 0.35f else 1f)
-            .onGloballyPositioned {
-                val b = it.boundsInRoot()
-                if (b != lastBounds[0]) {
-                    lastBounds[0] = b
-                    onBounds(b)
-                }
+            .onPlaced {
+                holder.coords = it
+                if (dragActive) onCoords(it)
             }
             .clip(MaterialTheme.shapes.small)
             .border(1.dp, (if (targeted) palette.accent else palette.border).toComposeColor(), MaterialTheme.shapes.small)
@@ -224,14 +316,16 @@ private fun SectionCard(
         header = {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 SectionDragStrip(
-                    // Explicit height: the card is measured with an unbounded max height, so
-                    // fillMaxHeight would collapse the grab strip to 0px and nothing could be pressed.
                     modifier = Modifier.weight(1f).height(34.dp),
-                    onBounds = onGrabBounds,
-                    onDragStart = onGrabDragStart,
+                    onCoords = onGrabCoords,
+                    onDragStart = { offset ->
+                        holder.coords?.let { onCoords(it) }
+                        onGrabDragStart(offset)
+                    },
                     onDrag = onGrabDrag,
                     onDrop = onGrabDrop,
                     onCancel = onGrabCancel,
+                    dragActive = dragActive,
                 )
                 Tooltip(stringResource(R.string.delete_section)) {
                     IconButton(onClick = onDelete, enabled = canDelete, modifier = Modifier.size(26.dp)) {
@@ -255,11 +349,17 @@ private fun SectionCardScaffold(
     header: @Composable () -> Unit,
     body: @Composable () -> Unit,
 ) {
-    Layout(contents = listOf(body, header), modifier = modifier) { measurables, constraints ->
+    Layout(
+        content = {
+            header()
+            body()
+        },
+        modifier = modifier,
+    ) { measurables, constraints ->
         val loose = constraints.copy(minWidth = 0, minHeight = 0)
-        val bodyPlaceable = measurables[0].first().measure(loose)
+        val bodyPlaceable = measurables[1].measure(loose)
         val width = bodyPlaceable.width.coerceIn(constraints.minWidth, constraints.maxWidth)
-        val headerPlaceable = measurables[1].first().measure(loose.copy(minWidth = width, maxWidth = width))
+        val headerPlaceable = measurables[0].measure(loose.copy(minWidth = width, maxWidth = width))
         layout(width, headerPlaceable.height + bodyPlaceable.height) {
             headerPlaceable.place(0, 0)
             bodyPlaceable.place(0, headerPlaceable.height)
@@ -271,29 +371,30 @@ private fun SectionCardScaffold(
 @Composable
 private fun SectionDragStrip(
     modifier: Modifier,
-    onBounds: (Rect) -> Unit,
+    onCoords: (androidx.compose.ui.layout.LayoutCoordinates) -> Unit,
     onDragStart: (Offset) -> Unit,
     onDrag: (Offset) -> Unit,
     onDrop: () -> Unit,
     onCancel: () -> Unit,
+    dragActive: Boolean = false,
 ) {
     val dStart by rememberUpdatedState(onDragStart)
     val dMove by rememberUpdatedState(onDrag)
     val dEnd by rememberUpdatedState(onDrop)
     val dCancel by rememberUpdatedState(onCancel)
-    val lastBounds = remember { arrayOfNulls<Rect>(1) }
+    val holder = remember { CoordsHolder() }
     Box(
         modifier
-            .onGloballyPositioned {
-                val b = it.boundsInRoot()
-                if (b != lastBounds[0]) {
-                    lastBounds[0] = b
-                    onBounds(b)
-                }
+            .onPlaced {
+                holder.coords = it
+                if (dragActive) onCoords(it)
             }
             .pointerInput(Unit) {
                 detectDragGesturesAfterLongPress(
-                    onDragStart = { dStart(it) },
+                    onDragStart = {
+                        holder.coords?.let { onCoords(it) }
+                        dStart(it)
+                    },
                     onDrag = { _, delta -> dMove(delta) },
                     onDragEnd = { dEnd() },
                     onDragCancel = { dCancel() },
@@ -312,7 +413,8 @@ private fun ChipCell(
     onDrag: (Offset) -> Unit,
     onDrop: () -> Unit,
     onCancel: () -> Unit,
-    onBounds: (Rect) -> Unit,
+    onCoords: (androidx.compose.ui.layout.LayoutCoordinates) -> Unit,
+    dragActive: Boolean = false,
 ) {
     // The pointerInput blocks key on the stable item, so they capture the first-composition
     // lambdas; rememberUpdatedState keeps the gestures calling the latest callbacks instead.
@@ -321,23 +423,23 @@ private fun ChipCell(
     val dMove by rememberUpdatedState(onDrag)
     val dEnd by rememberUpdatedState(onDrop)
     val dCancel by rememberUpdatedState(onCancel)
-    val lastBounds = remember { arrayOfNulls<Rect>(1) }
+    val holder = remember { CoordsHolder() }
     ChipFace(
         item = item,
         visible = visible,
         modifier = Modifier
             .alpha(if (dragging) 0.15f else 1f)
-            .onGloballyPositioned {
-                val b = it.boundsInRoot()
-                if (b != lastBounds[0]) {
-                    lastBounds[0] = b
-                    onBounds(b)
-                }
+            .onPlaced {
+                holder.coords = it
+                if (dragActive) onCoords(it)
             }
             .pointerInput(item) { detectTapGestures(onTap = { tap() }) }
             .pointerInput(item) {
                 detectDragGesturesAfterLongPress(
-                    onDragStart = { dStart(it) },
+                    onDragStart = {
+                        holder.coords?.let { onCoords(it) }
+                        dStart(it)
+                    },
                     onDrag = { _, delta -> dMove(delta) },
                     onDragEnd = { dEnd() },
                     onDragCancel = { dCancel() },
@@ -426,7 +528,7 @@ fun SectionCardGhost(section: ToolbarSection, widthPx: Float) {
 }
 
 @Composable
-private fun AddSectionChip(onClick: () -> Unit) {
+internal fun AddSectionChip(onClick: () -> Unit) {
     val palette = LocalPalette.current
     Row(
         Modifier
@@ -443,13 +545,13 @@ private fun AddSectionChip(onClick: () -> Unit) {
 }
 
 @Composable
-private fun InsertionCaret() {
+internal fun InsertionCaret() {
     Box(Modifier.width(2.dp).height(28.dp).background(LocalPalette.current.accent.toComposeColor()))
 }
 
 /** Taller caret marking where a dragged section will land between cards. */
 @Composable
-private fun SectionCaret() {
+internal fun SectionCaret() {
     Box(Modifier.width(3.dp).height(56.dp).clip(RoundedCornerShape(2.dp)).background(LocalPalette.current.accent.toComposeColor()))
 }
 

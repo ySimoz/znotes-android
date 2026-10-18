@@ -233,9 +233,14 @@ class DocumentCodec(
      */
     internal fun imageAssets(doc: Document): List<Pair<String, File>> {
         val out = ArrayList<Pair<String, File>>()
+        val seen = HashSet<String>()
         for (page in doc.pages) {
             for (item in page.items) {
                 if (item !is ImageItem) continue
+                // The same encoded image can be reused on many pages as custom paper. Store its
+                // bytes once in the bundle and let every item reference the same asset name.
+                val path = item.image.file.absoluteFile.normalize().path
+                if (!seen.add(path)) continue
                 // Readers match assets by manifest name (any extension); .svg keeps the bundle
                 // honest and older readers skip the item they can't decode.
                 val ext = if (Svg.isSvgFile(item.image.file)) "svg" else "png"
@@ -264,8 +269,8 @@ class DocumentCodec(
         }
         j.endArray()
         j.name("pages").beginArray()
-        val nextAsset = intArrayOf(0)
-        for (page in doc.pages) writePage(j, page, assets, nextAsset)
+        val assetByPath = assets.associate { (name, file) -> file.absoluteFile.normalize().path to name }
+        for (page in doc.pages) writePage(j, page, assetByPath)
         j.endArray()
         writeStyle(j, doc.style)
         writeMargins(j, doc.margins)
@@ -275,8 +280,7 @@ class DocumentCodec(
     private fun writePage(
         j: JsonWrite,
         page: Page,
-        assets: List<Pair<String, File>>,
-        nextAsset: IntArray,
+        assetByPath: Map<String, String>,
     ) {
         j.beginObject()
         j.name("width").value(page.width)
@@ -290,9 +294,9 @@ class DocumentCodec(
             when (item) {
                 is Stroke -> writeStroke(j, item)
                 is ImageItem -> {
-                    // The name was decided by [imageAssets]' walk of these same items; taking it
-                    // from there keeps the entry and the manifest agreeing by construction.
-                    val name = assets.getOrNull(nextAsset[0]++)?.first ?: continue
+                    // Names are keyed by the encoded source path, so repeated background images
+                    // across pages point to one embedded asset rather than duplicating its bytes.
+                    val name = assetByPath[item.image.file.absoluteFile.normalize().path] ?: continue
                     writeImage(j, item, name, ids[item])
                 }
                 is TextItem -> writeText(j, item, ids[item])

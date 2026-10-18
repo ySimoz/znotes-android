@@ -16,7 +16,7 @@ import org.junit.Test
 class PreferencesLatencyTest {
 
     @Test
-    fun preferencesPaneUsesLazyColumnStructure() {
+    fun preferencesPaneUsesScrollableColumn() {
         val candidates = listOf(
             File("app/src/main/java/com/xnotes/ui/PreferencesPane.kt"),
             File("src/main/java/com/xnotes/ui/PreferencesPane.kt"),
@@ -25,10 +25,9 @@ class PreferencesLatencyTest {
         assertNotNull("PreferencesPane.kt must exist", file)
         val text = file!!.readText()
 
-        // Verify LazyColumn is used instead of a non-lazy Column with verticalScroll
-        assertTrue("PreferencesPane must use rememberLazyListState()", text.contains("rememberLazyListState()"))
-        assertTrue("PreferencesPane must use LazyColumn for lazy rendering", text.contains("LazyColumn("))
-        assertTrue("PreferencesPane must not use eager verticalScroll on root column", !text.contains(".verticalScroll("))
+        // Verify verticalScroll is used to avoid mid-scroll recomposition jank on high-refresh panels
+        assertTrue("PreferencesPane must use rememberScrollState()", text.contains("rememberScrollState()"))
+        assertTrue("PreferencesPane must use verticalScroll", text.contains("verticalScroll(scrollState)"))
     }
 
     @Test
@@ -89,5 +88,20 @@ class PreferencesLatencyTest {
         assertEquals(30, prefs.trashDays)
         assertEquals(Orientation.PORTRAIT, prefs.defaultPageOrientation)
         assertTrue(prefs.switcherLayouts.isNotEmpty())
+    }
+
+
+    @Test
+    fun backstageMainMaintainsStableWidthDuringSidebarExpandAnimation() {
+        val candidates = listOf(
+            File("app/src/main/java/com/xnotes/ui/Backstage.kt"),
+            File("src/main/java/com/xnotes/ui/Backstage.kt"),
+        )
+        val file = candidates.firstOrNull { it.exists() }
+        assertNotNull("Backstage.kt must exist", file)
+        val text = file!!.readText()
+
+        // Verify BackstageMain keeps measured width stable during expand animation
+        assertTrue("BackstageMain must stabilize width with targetInset", text.contains("targetInset"))
     }
 }

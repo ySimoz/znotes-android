@@ -114,7 +114,7 @@ kotlin {
 // library profiles) is not reproducible across build hosts, so omit it from release builds.
 // Tradeoff: slightly slower first-run startup (no ART pre-warm profile).
 tasks.configureEach {
-    if (name.contains("ArtProfile")) enabled = false
+    if (name.contains("ReleaseArtProfile")) enabled = false
 }
 
 dependencies {

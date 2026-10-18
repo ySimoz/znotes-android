@@ -28,9 +28,14 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -66,6 +71,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -179,14 +185,112 @@ private fun ToolbarItemView(
 
         ToolbarItem.HOME -> ToolbarIcon(XnotesIcons.prev, stringResource(R.string.toolbar_home)) { onOpenBackstage() }
         // A name has no room down a side rail.
-        ToolbarItem.TITLE -> if (!LocalBar.current.vertical) Tooltip(stringResource(R.string.rename_note)) {
-            Label(
-                if (editor.state.document.displayName == null && editor.state.document.path == null) stringResource(R.string.untitled) else editor.title,
-                modifier = Modifier
-                    .widthIn(max = 160.dp)
-                    .clip(MaterialTheme.shapes.extraSmall)
-                    .clickable { onRename() },
-            )
+        ToolbarItem.TITLE -> if (!LocalBar.current.vertical) {
+            var tabSwitcherOpen by remember { mutableStateOf(false) }
+            val palette = LocalPalette.current
+            Box {
+                Tooltip(stringResource(R.string.switch_note)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .widthIn(max = 200.dp)
+                            .clip(MaterialTheme.shapes.extraSmall)
+                            .clickable { tabSwitcherOpen = true }
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                    ) {
+                        Label(
+                            if (editor.state.document.displayName == null && editor.state.document.path == null) stringResource(R.string.untitled) else editor.title,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        Spacer(Modifier.width(2.dp))
+                        Icon(
+                            imageVector = XnotesIcons.chevronDown,
+                            contentDescription = null,
+                            tint = palette.textDim.toComposeColor(),
+                            modifier = Modifier.size(12.dp),
+                        )
+                    }
+                }
+                DropdownMenu(
+                    expanded = tabSwitcherOpen,
+                    onDismissRequest = { tabSwitcherOpen = false },
+                ) {
+                    if (editor.tabManager.count > 0) {
+                        editor.tabManager.tabs.forEachIndexed { index, tab ->
+                            val isActive = index == editor.tabManager.activeIndex
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = tab.title.ifEmpty { stringResource(R.string.untitled) },
+                                        fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+                                        color = if (isActive) MaterialTheme.colorScheme.primary else palette.text.toComposeColor(),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                },
+                                leadingIcon = {
+                                    if (isActive) {
+                                        Icon(
+                                            imageVector = XnotesIcons.check,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    } else {
+                                        Spacer(modifier = Modifier.size(16.dp))
+                                    }
+                                },
+                                trailingIcon = {
+                                    if (editor.tabManager.count > 1) {
+                                        IconButton(
+                                            onClick = {
+                                                editor.closeTab(index)
+                                                if (editor.tabManager.count == 0) tabSwitcherOpen = false
+                                            },
+                                            modifier = Modifier.size(24.dp),
+                                        ) {
+                                            Icon(
+                                                imageVector = XnotesIcons.close,
+                                                contentDescription = stringResource(R.string.close_pane),
+                                                tint = palette.textDim.toComposeColor(),
+                                                modifier = Modifier.size(12.dp),
+                                            )
+                                        }
+                                    }
+                                },
+                                onClick = {
+                                    tabSwitcherOpen = false
+                                    editor.switchToTab(index)
+                                },
+                            )
+                        }
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 4.dp),
+                            color = palette.border.toComposeColor(),
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.home)) },
+                        leadingIcon = {
+                            Icon(XnotesIcons.folder, contentDescription = null, tint = palette.textDim.toComposeColor(), modifier = Modifier.size(16.dp))
+                        },
+                        onClick = {
+                            tabSwitcherOpen = false
+                            onOpenBackstage()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.rename)) },
+                        leadingIcon = {
+                            Icon(XnotesIcons.edit, contentDescription = null, tint = palette.textDim.toComposeColor(), modifier = Modifier.size(16.dp))
+                        },
+                        onClick = {
+                            tabSwitcherOpen = false
+                            onRename()
+                        },
+                    )
+                }
+            }
         }
         ToolbarItem.SIDEBAR ->
             ToolbarIcon(XnotesIcons.sidebar, stringResource(R.string.side_panel), active = editor.sidebarVisible, shortcut = Keys.SIDEBAR) { editor.toggleSidebar() }

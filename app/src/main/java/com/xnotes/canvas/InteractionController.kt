@@ -358,14 +358,8 @@ class InteractionController(
      *  erase yields to a two-finger pinch, a stylus erase ignores incidental finger/palm contact. */
     private var erasingWithFinger = false
 
-    // ITEM CLIPBOARD (in-app, for copy/cut/paste/duplicate)
-    private val itemClipboard = mutableListOf<CanvasItem>()
-
-    /** Whether the clipboard was filled by a cut. A cut moves the items rather than copying them,
-     *  so the first paste puts them back and spends the clipboard; a copy's stays for as long as
-     *  the user wants it. */
-    private var clipboardFromCut = false
-    fun hasClipboardItems(): Boolean = itemClipboard.isNotEmpty()
+    // ITEM CLIPBOARD (process-wide in SharedItemClipboard, for copy/cut/paste/duplicate across tabs)
+    fun hasClipboardItems(): Boolean = SharedItemClipboard.hasItems()
 
     // SHAPE
     var shapeConfig: ShapeConfig = ShapeConfig()
@@ -3501,9 +3495,7 @@ class InteractionController(
      *  cut/duplicate can reuse it without tripping the select tool's switch-back. */
     private fun copyToClipboard() {
         if (selection.isEmpty()) return
-        itemClipboard.clear()
-        clipboardFromCut = false
-        itemClipboard.addAll(selection.map { it.item }.deepCopyAll(textMeasurer))
+        SharedItemClipboard.copy(selection.map { it.item }, textMeasurer)
     }
 
     fun copySelection() {
@@ -3514,8 +3506,7 @@ class InteractionController(
 
     fun cutSelection() {
         if (selection.isEmpty()) return
-        copyToClipboard()
-        clipboardFromCut = true
+        SharedItemClipboard.cut(selection.map { it.item }, textMeasurer)
         deleteSelection() // also runs the select tool's switch-back, once
     }
 
@@ -3559,10 +3550,10 @@ class InteractionController(
     }
 
     private fun pasteClonesOnPage(pageIndex: Int, target: Pt, offsetFromBoundsTopLeft: Boolean, nudge: Double) {
-        if (itemClipboard.isEmpty()) return
+        if (!SharedItemClipboard.hasItems()) return
         val page = state.document.pages.getOrNull(pageIndex) ?: return
         if (state.pageRects.getOrNull(pageIndex) == null) return
-        val clones = itemClipboard.deepCopyAll(textMeasurer)
+        val clones = SharedItemClipboard.getClones(textMeasurer)
         // Collective bounds (page-local) of the clones.
         var box: Rect? = null
         for (c in clones) box = box?.union(c.bounds()) ?: c.bounds()
@@ -3575,10 +3566,7 @@ class InteractionController(
         history.push(AddItems(page, clones))
         // A cut's clipboard is spent by the paste that lands it: the items were taken from the
         // page, so putting them down finishes the move rather than starting a series of copies.
-        if (clipboardFromCut) {
-            itemClipboard.clear()
-            clipboardFromCut = false
-        }
+        SharedItemClipboard.consumeCut()
         state.document.dirty = true
         // The clones are immediately selected (lifted) below; setSelection repairs their
         // region in place, so no separate page rebuild is needed here.

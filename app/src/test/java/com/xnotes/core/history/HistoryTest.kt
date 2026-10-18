@@ -249,4 +249,24 @@ class HistoryTest {
         assertNull(h.nextUndo)
         assertSame(cmd, h.nextRedo)
     }
+
+    @Test fun replaceWithAndCopyToTransfersUndoRedoStacks() {
+        val page = Page(100.0, 100.0)
+        val h1 = History()
+        val s1 = strokeAt(1.0)
+        val s2 = strokeAt(2.0)
+        h1.push(AddItem(page, s1))
+        h1.push(AddItem(page, s2))
+        h1.undo() // 1 in undo, 1 in redo
+
+        val h2 = History()
+        h2.replaceWith(h1)
+        assertTrue(h2.canUndo)
+        assertTrue(h2.canRedo)
+
+        val h3 = History()
+        h1.copyTo(h3)
+        assertTrue(h3.canUndo)
+        assertTrue(h3.canRedo)
+    }
 }

@@ -24,6 +24,9 @@ class SessionStore(private val dir: File, private val codec: DocumentCodec, priv
     private val docFile = File(dir, "document.xnote")
     private val meta = JsonStore(File(dir, "session.json"))
 
+    /** Whether a paged note session file exists. */
+    fun exists(): Boolean = docFile.exists()
+
     /** A restored session: the document plus the view state to reapply. */
     class Snapshot(
         val document: Document,

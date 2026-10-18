@@ -30,6 +30,10 @@ enum class PageSize(val displayName: String, val shortMm: Double, val longMm: Do
     SLIDE_16_9("Slide 16:9", 190.5, 338.7),
     SLIDE_4_3("Slide 4:3", 190.5, 254.0);
 
+    /** Returns `(width, height)` in millimetres for template geometry and page previews. */
+    fun millimetres(orientation: Orientation): Pair<Double, Double> =
+        if (orientation == Orientation.PORTRAIT) shortMm to longMm else longMm to shortMm
+
     /** Returns `(width, height)` in document pixels for [orientation] at [dpi]. */
     fun pixels(orientation: Orientation, dpi: Int): Pair<Double, Double> {
         val shortPx = mmToPx(shortMm, dpi)

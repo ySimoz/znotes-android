@@ -90,6 +90,25 @@ class DocumentCodecTest {
         return out
     }
 
+    @Test fun coverPageStyleAndTitleSurviveRoundTrip() {
+        val doc = Document.blankPixels(2, 1240.0, 1754.0)
+        doc.style = PageStyle(pageColor = Rgba(245, 245, 245), template = PagePattern.LINES.id)
+        doc.pages[0].style = PageStyle(pageColor = Rgba(47, 62, 112), template = PagePattern.DOTS.id)
+        doc.pages[0].items += TextItem(
+            pos = Pt(124.0, 596.0), width = 992.0, text = "Research notebook",
+            rgba = Rgba(250, 250, 250), pointSize = 32.0, face = FontFace.SANS,
+            measurer = FakeTextMeasurer(),
+        )
+
+        val back = roundTrip(doc)
+        assertEquals(2, back.pages.size)
+        assertEquals(doc.style, back.style)
+        assertEquals(doc.pages[0].style, back.pages[0].style)
+        val title = back.pages[0].items.single() as TextItem
+        assertEquals("Research notebook", title.text)
+        assertEquals(32.0, title.pointSize, 0.0)
+    }
+
     @Test fun markupsRideTheirOwnEntryJustBeforeTheManifest() {
         val doc = Document(dpi = 150)
         doc.pages += Page(1240.0, 1754.0)
@@ -510,6 +529,65 @@ class DocumentCodecTest {
         val loaded = roundTrip(doc)
         assertFalse(loaded.compactedOnLoad)
         assertEquals(100, (loaded.pages[0].items[0] as Stroke).samples.size)
+    }
+
+    @Test fun sharedPageBackgroundImageIsStoredOnlyOnceAndReferencedByEveryPage() {
+        val doc = Document.blank(count = 3)
+        val shared = ImageData(imageFile(), 100, 150)
+        doc.pages.forEach { page ->
+            page.items.add(ImageItem(shared, Rect(0.0, 0.0, page.width, page.height)))
+        }
+        assertEquals(1, codec.imageAssets(doc).size)
+        val out = ByteArrayOutputStream()
+        codec.write(doc, out)
+        assertEquals(1, entryNames(out.toByteArray()).count { it.startsWith("assets/image-") })
+        val back = roundTrip(doc)
+        assertTrue(back.pages.all { it.items.single() is ImageItem })
+        assertEquals(1, back.pages.map { (it.items.single() as ImageItem).image.file.absolutePath }.distinct().size)
+    }
+
+    @Test fun mixedSharedAndDistinctImagesRoundTripPreservingAttributes() {
+        val doc = Document.blank(count = 2)
+        val shared = ImageData(imageFile(), 100, 150)
+        val distinct = ImageData(imageFile(), 50, 75)
+
+        val item1 = ImageItem(shared, Rect(0.0, 0.0, 100.0, 150.0), angle = 0.25, flip = Flip.X).apply { locked = true }
+        val item2 = ImageItem(distinct, Rect(10.0, 20.0, 50.0, 75.0), angle = 0.5, flip = Flip.Y)
+        val item3 = ImageItem(shared, Rect(5.0, 5.0, 100.0, 150.0), angle = 0.0, flip = Flip.NONE)
+
+        doc.pages[0].items.addAll(listOf(item1, item2))
+        doc.pages[1].items.add(item3)
+
+        assertEquals(2, codec.imageAssets(doc).size)
+        val out = ByteArrayOutputStream()
+        codec.write(doc, out)
+        assertEquals(2, entryNames(out.toByteArray()).count { it.startsWith("assets/image-") })
+
+        val back = roundTrip(doc)
+        val p0Items = back.pages[0].items
+        assertEquals(2, p0Items.size)
+        val b1 = p0Items[0] as ImageItem
+        val b2 = p0Items[1] as ImageItem
+        val b3 = back.pages[1].items[0] as ImageItem
+
+        assertEquals(0.25, b1.angle, 1e-12)
+        assertEquals(Flip.X, b1.flip)
+        assertTrue(b1.locked)
+        assertEquals(Rect(0.0, 0.0, 100.0, 150.0), b1.rect)
+
+        assertEquals(0.5, b2.angle, 1e-12)
+        assertEquals(Flip.Y, b2.flip)
+        assertFalse(b2.locked)
+        assertEquals(Rect(10.0, 20.0, 50.0, 75.0), b2.rect)
+
+        assertEquals(0.0, b3.angle, 1e-12)
+        assertEquals(Flip.NONE, b3.flip)
+        assertFalse(b3.locked)
+        assertEquals(Rect(5.0, 5.0, 100.0, 150.0), b3.rect)
+
+        // b1 and b3 share the same underlying asset file, while b2 is distinct
+        assertEquals(b1.image.file.absolutePath, b3.image.file.absolutePath)
+        org.junit.Assert.assertNotEquals(b1.image.file.absolutePath, b2.image.file.absolutePath)
     }
 
     @Test fun aMirroredImageRoundTripsInANote() {

@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.xnotes.canvas.InteractionController
+import com.xnotes.canvas.SharedItemClipboard
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.history.EditLabel
@@ -453,11 +454,6 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
      * here. The behaviour they present is the same, which is what the shared [SelectionMenu] holds
      * them to.
      */
-    private val clipboard = ArrayList<CanvasItem>()
-
-    /** Whether the clipboard was filled by a cut, which the first paste spends. Same rule as the
-     *  paged canvas: a cut moves items, so pasting them back finishes the move. */
-    private var clipboardFromCut = false
 
     /** Only text needs a measurer to clone, and the canvas has none; this satisfies the signature. */
     private val textMeasurer = com.xnotes.platform.AndroidTextMeasurer()
@@ -505,15 +501,12 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
     }
 
     private fun copyToClipboard() {
-        clipboard.clear()
-        clipboardFromCut = false
-        clipboard.addAll(selection.items.deepCopyAll(textMeasurer))
+        SharedItemClipboard.copy(selection.items.toList(), textMeasurer)
     }
 
     override fun cutSelection() {
         if (selection.isEmpty) return
-        copyToClipboard()
-        clipboardFromCut = true
+        SharedItemClipboard.cut(selection.items.toList(), textMeasurer)
         deleteSelection() // also runs the select tool's switch-back, once
     }
 
@@ -557,8 +550,8 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
 
     /** Paste the clipboard at [atContent], or a nudge from where it was copied. */
     fun pasteClipboard(atContent: Pt? = null) {
-        if (clipboard.isEmpty()) return
-        val clones = clipboard.deepCopyAll(textMeasurer)
+        if (!SharedItemClipboard.hasItems()) return
+        val clones = SharedItemClipboard.getClones(textMeasurer)
         var box: Rect? = null
         for (clone in clones) box = box?.union(clone.bounds()) ?: clone.bounds()
         val bounds = box ?: return
@@ -574,10 +567,7 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
         for (clone in clones) clone.translate(dx, dy)
         document.addAll(clones)
         history.push(AddCanvasItems(document, clones))
-        if (clipboardFromCut) {
-            clipboard.clear()
-            clipboardFromCut = false
-        }
+        SharedItemClipboard.consumeCut()
         selection.select(clones)
         armTool(Tool.SELECT)
         markDirty()
@@ -585,7 +575,7 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
         publishOverlay()
     }
 
-    override val hasClipboardItems: Boolean get() = clipboard.isNotEmpty()
+    override val hasClipboardItems: Boolean get() = SharedItemClipboard.hasItems()
 
     // --- long-press paste menu ---
 

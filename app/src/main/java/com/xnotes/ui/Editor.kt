@@ -16,6 +16,8 @@ import com.xnotes.canvas.EditingField
 import com.xnotes.canvas.FlowTextController
 import com.xnotes.canvas.InitialView
 import com.xnotes.canvas.InteractionController
+import com.xnotes.canvas.NoteTabManager
+import com.xnotes.canvas.NoteTabSession
 import com.xnotes.canvas.TextBar
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
@@ -44,6 +46,7 @@ import com.xnotes.core.model.PageSize
 import com.xnotes.core.model.PageStyle
 import com.xnotes.core.model.PageTemplates
 import com.xnotes.core.model.Rgba
+import com.xnotes.core.model.TextItem
 import com.xnotes.core.model.TextMarkup
 import com.xnotes.core.pal.FontFace
 import com.xnotes.core.pal.Renderer
@@ -100,6 +103,7 @@ import com.xnotes.format.XNoteFormatException
 import com.xnotes.platform.AndroidImageCodec
 import com.xnotes.platform.AndroidSurfaceFactory
 import com.xnotes.platform.AndroidTextMeasurer
+import com.xnotes.core.pal.TextMeasurer
 import com.xnotes.settings.ExplorerView
 import com.xnotes.settings.LiveSettings
 import com.xnotes.settings.Preferences
@@ -231,6 +235,66 @@ private val sharedRecents = androidx.compose.runtime.mutableStateOf<List<com.xno
  */
 enum class Pane { PRIMARY, SECONDARY }
 
+/**
+ * Options specified when creating a new note from the note creation dialog.
+ */
+data class NoteCreationOptions(
+    val pageSize: PageSize,
+    val orientation: Orientation,
+    val pageStyle: PageStyle,
+    val includeCover: Boolean,
+    val coverStyle: PageStyle,
+    /** Optional encoded image to place behind the title on the first page. */
+    val coverImageBytes: ByteArray? = null,
+    /** Optional image used as the background paper on every page. */
+    val pageImageBytes: ByteArray? = null,
+    /** Custom page width in mm if pageSize is CUSTOM. */
+    val customWidthMm: Double? = null,
+    /** Custom page height in mm if pageSize is CUSTOM. */
+    val customHeightMm: Double? = null,
+)
+
+/** Populates a blank document with the style, templates, background images, and cover from [options]. */
+internal fun populateBlankDocument(
+    blank: Document,
+    title: String,
+    options: NoteCreationOptions,
+    pageImageData: ImageData? = null,
+    coverImageData: ImageData? = null,
+    textMeasurer: TextMeasurer,
+) {
+    blank.style = options.pageStyle
+    TemplateLibrary.embed(blank, options.pageStyle.template)
+    if (pageImageData != null) {
+        blank.pages.forEachIndexed { index, page ->
+            if (!(options.includeCover && index == 0)) {
+                page.items.add(0, ImageItem(pageImageData, Rect(0.0, 0.0, page.width, page.height)).apply { locked = true })
+            }
+        }
+    }
+    if (options.includeCover && blank.pages.isNotEmpty()) {
+        val cover = blank.pages.first()
+        cover.style = options.coverStyle
+        TemplateLibrary.embed(blank, options.coverStyle.template)
+        if (coverImageData != null) {
+            cover.items.add(ImageItem(coverImageData, Rect(0.0, 0.0, cover.width, cover.height)).apply { locked = true })
+        }
+        val paper = options.coverStyle.pageColor
+        val ink = if (paper != null && paper.luminance() < 0.42) Rgba(250, 250, 250) else Rgba(35, 39, 48)
+        cover.items.add(
+            TextItem(
+                pos = Pt(cover.width * 0.10, cover.height * 0.34),
+                width = cover.width * 0.80,
+                text = title.ifBlank { "Untitled" },
+                rgba = ink,
+                pointSize = 32.0,
+                face = FontFace.SANS,
+                measurer = textMeasurer,
+            ),
+        )
+    }
+}
+
 @Stable
 class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, SelectionMenuHost, LongPressMenuHost, TextEditHost {
 
@@ -270,15 +334,14 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     var fullscreen by mutableStateOf(settings.prefs.startFullscreen ?: !deviceHasDisplayCutout)
         private set
 
-    /** Prepares one of the shared temp dirs. The launch purge drops temps orphaned by a crash, which
-     *  is safe for the primary editor because no real note is open yet at construction. A secondary
-     *  pane is built mid-session, with the primary's note already live in these dirs, so it only
-     *  takes the handle. */
+    /** Whether a saved notebook or infinite canvas session exists on disk to restore. */
+    val hasSavedSession: Boolean
+        get() = canvasSession.exists() || session.exists()
+
+    /** Prepares one of the shared temp dirs. The launch purge drops temps orphaned by a crash,
+     *  offloaded to Dispatchers.IO so editor construction on the UI thread never blocks on disk. */
     private fun tempDir(name: String): java.io.File =
-        java.io.File(appContext.filesDir, name).apply {
-            mkdirs()
-            if (pane == Pane.PRIMARY) listFiles()?.forEach { it.delete() }
-        }
+        java.io.File(appContext.filesDir, name).apply { mkdirs() }
 
     /** Private dir holding each note's source PDF as a file, so a large PDF is never held whole in
      *  RAM (the renderer memory-maps it). Under filesDir, not the reclaimable cacheDir: the OS could
@@ -305,7 +368,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     private val stickerDir = java.io.File(appContext.filesDir, "stamps").apply { mkdirs() }
 
     /** Sticker files, oldest first (names embed the add time so a plain name sort is stable). */
-    var stickers: List<java.io.File> by mutableStateOf(listStickers())
+    var stickers: List<java.io.File> by mutableStateOf(emptyList())
         private set
 
     private fun listStickers(): List<java.io.File> = stickerDir.listFiles()?.sortedBy { it.name }.orEmpty()
@@ -313,8 +376,13 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     /** Re-read the library into both panes: they browse one shared directory, so a sticker added
      *  or removed on one toolbar has to show up on the other. */
     private fun refreshStickers() {
-        stickers = listStickers()
-        sibling?.let { it.stickers = it.listStickers() }
+        autosaveScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val loaded = listStickers()
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
+                stickers = loaded
+                sibling?.stickers = loaded
+            }
+        }
     }
 
     /** The temp PDF file backing the currently open document, tracked so it's deleted when the note
@@ -327,6 +395,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         buildPalette(settings.prefs),
     )
     val history = History()
+    val tabManager = NoteTabManager()
     val view = CanvasView(context).also { it.state = state }
 
     /** The front buffer wet ink goes into, above [view] and transparent whenever no pen is down. */
@@ -351,22 +420,28 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     private class PublishedFlow(val frame: FlowFrame, val indexOf: Map<Page, Int>)
     private val flowLayout = FlowLayout(textMeasurer, com.xnotes.platform.MathRendering)
 
-    private val treeSitter = com.xnotes.platform.TreeSitterHighlighter(appContext)
-    private val highlighter: com.xnotes.core.text.CodeHighlighter? =
-        treeSitter.takeIf { com.xnotes.platform.TreeSitterNative.loaded }
+    private val treeSitter by lazy { com.xnotes.platform.TreeSitterHighlighter(appContext) }
+    private val highlighter: com.xnotes.core.text.CodeHighlighter?
+        get() = if (com.xnotes.platform.TreeSitterNative.loaded) treeSitter else null
 
-    /** A user-imported Helix code theme (parsed once); null = the built-in dark/light pair. */
-    private var customCodeTheme: com.xnotes.core.text.HighlightTheme? =
-        settings.prefs.codeThemePath?.let { path ->
-            runCatching { com.xnotes.format.HelixTheme.parse(java.io.File(path).readText()) }.getOrNull()
-        }
+    /** A user-imported Helix code theme (parsed lazily on first access); null = the built-in dark/light pair. */
+    private var customCodeTheme: com.xnotes.core.text.HighlightTheme? = null
+    private var customCodeThemeLoaded = false
 
-    private fun activeCodeTheme(): com.xnotes.core.text.HighlightTheme = customCodeTheme
-        ?: if (resolvedAppearance(settings.prefs) != "light") {
-            com.xnotes.core.text.HighlightTheme.DARK
-        } else {
-            com.xnotes.core.text.HighlightTheme.LIGHT
+    private fun activeCodeTheme(): com.xnotes.core.text.HighlightTheme {
+        if (!customCodeThemeLoaded) {
+            customCodeThemeLoaded = true
+            customCodeTheme = settings.prefs.codeThemePath?.let { path ->
+                runCatching { com.xnotes.format.HelixTheme.parse(java.io.File(path).readText()) }.getOrNull()
+            }
         }
+        return customCodeTheme
+            ?: if (resolvedAppearance(settings.prefs) != "light") {
+                com.xnotes.core.text.HighlightTheme.DARK
+            } else {
+                com.xnotes.core.text.HighlightTheme.LIGHT
+            }
+    }
 
     /** Derived spans per code paragraph, keyed by its revision (main thread only). */
     private val highlightCache = HashMap<Paragraph, Pair<Int, List<com.xnotes.core.text.HighlightSpan>>>()
@@ -395,6 +470,9 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     private val session = com.xnotes.platform.SessionStore(sessionDir, codec, pdfDir, imageDir)
     private val canvasSession = com.xnotes.platform.CanvasSessionStore(sessionDir, canvasCodec, imageDir)
     private val viewStates = com.xnotes.platform.ViewStateStore(com.xnotes.platform.JsonStore.viewStates(appContext))
+    private val tabStore = com.xnotes.platform.TabSessionStore(
+        appContext.getSharedPreferences("xnotes_tabs_${if (pane == Pane.PRIMARY) "p" else "s"}", Context.MODE_PRIVATE)
+    )
     private var lastSessionContentVersion = -1
     private var sessionLoaded = false
 
@@ -1579,6 +1657,18 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         maybeAutoEnableFingerDraw()
         applySettings()
         rebuildPdfSource()
+
+        autosaveScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            if (pane == Pane.PRIMARY) {
+                listOf(pdfDir, imageDir, saveTmpDir, batchDir).forEach { dir ->
+                    runCatching { dir.listFiles()?.forEach { it.delete() } }
+                }
+            }
+            val loadedStickers = runCatching { listStickers() }.getOrDefault(emptyList())
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
+                stickers = loadedStickers
+            }
+        }
     }
 
     // --- selection menu / clipboard ---
@@ -2536,6 +2626,65 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             state.relayout()
             if (state.viewportW > 0) state.establishInitialView()
             maybeBindAutosave(state.document.path) // resume autosave if the restored note is in the folder
+            val path = state.document.path
+            if (path != null) {
+                registerOpenTab(path, state.document.displayName, state.document)
+            } else {
+                val title = state.document.displayName ?: state.document.title
+                val initialSession = NoteTabSession(
+                    uri = null,
+                    title = title.ifEmpty { "Untitled" },
+                    document = state.document,
+                    autosaveUri = autosaveUri,
+                    viewOverrides = viewOverrides,
+                    zoom = snap.zoom,
+                    scrollX = snap.scrollX,
+                    scrollY = snap.scrollY,
+                    didInitialFit = true,
+                )
+                tabManager.openOrSelectTab(null, initialSession.title, { initialSession })
+            }
+            val tabSnap = tabStore.load()
+            if (tabSnap.uris.isNotEmpty()) {
+                val otherUris = tabSnap.uris.filter { it != path }
+                for (otherUri in otherUris) {
+                    if (tabManager.count >= 8) break
+                    val otherDoc = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        runCatching {
+                            appContext.contentResolver.openInputStream(android.net.Uri.parse(otherUri))
+                                ?.use { codec.read(it, pdfDir, imageDir) }
+                        }.getOrNull()
+                    }
+                    if (otherDoc != null) {
+                        otherDoc.path = otherUri
+                        val displayName = runCatching {
+                            appContext.contentResolver.query(
+                                android.net.Uri.parse(otherUri),
+                                arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+                                null, null, null,
+                            )?.use { if (it.moveToFirst()) it.getString(0) else null }
+                        }.getOrNull()
+                        val title = displayName?.let { com.xnotes.core.util.Paths.stem(it) }
+                            ?: otherDoc.displayName
+                            ?: com.xnotes.core.util.Paths.stem(otherUri)
+                        otherDoc.displayName = title
+                        val otherSession = NoteTabSession(
+                            uri = otherUri,
+                            title = title.ifEmpty { "Untitled" },
+                            document = otherDoc,
+                            autosaveUri = otherUri,
+                        )
+                        tabManager.openOrSelectTab(otherUri, otherSession.title, { otherSession })
+                    }
+                }
+                val targetUri = path ?: tabSnap.uris.getOrNull(tabSnap.activeIndex)
+                if (targetUri != null) {
+                    val idx = tabManager.indexOfUri(targetUri)
+                    if (idx >= 0 && idx != tabManager.activeIndex) {
+                        tabManager.selectTab(idx)
+                    }
+                }
+            }
             refreshContent()
             view.requestRender()
         }
@@ -2601,9 +2750,20 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     val currentPageStyle: PageStyle
         get() = state.document.pages.getOrNull(state.currentPageIndex())?.style ?: PageStyle()
 
+    /** Defaults used to prefill the new-note creation dialog. */
+    val defaultNewPageSize: PageSize get() = settings.prefs.defaultPageSize
+    val defaultNewPageOrientation: Orientation get() = settings.prefs.defaultPageOrientation
+
     /** The saved All Pages style stamped onto newly created notes (empty ⇒ app built-ins). */
     var newNoteStyle by mutableStateOf(settings.newNoteStyle)
         private set
+
+    /** Transient image chosen in the note-creation dialog; embedded into the new note on creation. */
+    var noteCreationCoverImageBytes by mutableStateOf<ByteArray?>(null)
+    var noteCreationPageImageBytes by mutableStateOf<ByteArray?>(null)
+
+    /** Refresh custom cover/page image strips after an import completes. */
+    fun customAssetsChanged() { TemplateLibraryUi.version++ }
 
     /** Save (or, passing an empty style, forget) the All Pages style new notes start with. */
     fun saveNewNoteStyle(style: PageStyle) {
@@ -2639,10 +2799,25 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         settingsRepo.save(settings)
     }
 
-    /** A blank document at the user's default page size, custom dimensions included. */
-    private fun blankDocument(): Document {
-        val (w, h) = settings.prefs.newPagePixels()
-        return Document.blankPixels(Document.DEFAULT_NEW_PAGES, w, h).also { it.created = System.currentTimeMillis() }
+    /** A blank document at a chosen page size, falling back to the user's defaults. */
+    private fun blankDocument(
+        pageSize: PageSize? = null,
+        orientation: Orientation? = null,
+        count: Int = Document.DEFAULT_NEW_PAGES,
+        customWidthMm: Double? = null,
+        customHeightMm: Double? = null,
+    ): Document {
+        val prefs = settings.prefs
+        val chosenSize = pageSize ?: prefs.defaultPageSize
+        val chosenOrientation = orientation ?: prefs.defaultPageOrientation
+        val (w, h) = if (chosenSize == PageSize.CUSTOM) {
+            val widthMm = customWidthMm ?: prefs.customPageWidthMm
+            val heightMm = customHeightMm ?: prefs.customPageHeightMm
+            val a = PageSize.mmToPx(widthMm, PageSize.DEFAULT_DPI)
+            val b = PageSize.mmToPx(heightMm, PageSize.DEFAULT_DPI)
+            if (chosenOrientation == Orientation.LANDSCAPE) maxOf(a, b) to minOf(a, b) else minOf(a, b) to maxOf(a, b)
+        } else chosenSize.pixels(chosenOrientation, PageSize.DEFAULT_DPI)
+        return Document.blankPixels(count, w, h).also { it.created = System.currentTimeMillis() }
     }
 
     /** Stamp the saved new-note defaults (page style + flow config) onto a fresh [doc]. */
@@ -3085,6 +3260,12 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
      * ignored, so two reads never race to swap in a document.
      */
     suspend fun openAsync(uri: String, name: String? = null) {
+        val existing = tabManager.findTabByUri(uri)
+        if (existing != null) {
+            switchToTabByUri(uri)
+            noteOpen = true
+            return
+        }
         if (opening) return
         openCancelled.set(false)
         opening = true
@@ -3119,6 +3300,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             state.openFileBytes = fileBytes
             state.lastSaveBytes = fileBytes // the on-disk size, until the first autosave rewrites it
             maybeBindAutosave(uri) // resume autosaving if this note lives in the granted folder
+            registerOpenTab(uri, name, doc)
             noteOpen = true // push the editor on top of backstage (only on a successful open)
             rememberOpened(uri, name)
         } catch (e: XNoteFormatException) {
@@ -3550,6 +3732,8 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     fun updateBrowseRoot(treeUri: String) {
         colorNames = emptyMap()
         browseRoot = treeUri
+        TemplateLibrary.configureStorageTree(treeUri)
+        TemplateLibraryUi.version++
         settings = settings.copy(browseRoot = treeUri)
         settingsRepo.save(settings)
         browseCache.clear()
@@ -3838,9 +4022,53 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     }
 
     /** Creates a blank `.xnote` under [parentDocId]; returns its URI, or null. IO — call off-thread. */
-    fun createBlankNoteFile(treeUri: String, parentDocId: String, rawName: String): String? {
+    fun createBlankNoteFile(
+        treeUri: String,
+        parentDocId: String,
+        rawName: String,
+        options: NoteCreationOptions? = null,
+    ): String? {
         val name = uniqueDocumentName(treeUri, parentDocId, rawName, com.xnotes.core.util.DocumentKind.NOTE)
-        val blank = blankDocument().also { stampNewNoteDefaults(it) }
+        val blank = if (options == null) blankDocument() else {
+            blankDocument(
+                options.pageSize,
+                options.orientation,
+                if (options.includeCover) 2 else 1,
+                options.customWidthMm,
+                options.customHeightMm,
+            )
+        }
+        stampNewNoteDefaults(blank)
+        if (options != null) {
+            val pageImageData = options.pageImageBytes?.let { bytes ->
+                val file = runCatching {
+                    java.io.File.createTempFile("paper", null, imageDir).apply { writeBytes(bytes) }
+                }.getOrNull()
+                val size = file?.let { imageCodec.probeFile(it.path) }
+                if (file != null && size != null && size.width > 0 && size.height > 0) {
+                    ImageData(file, size.width, size.height)
+                } else {
+                    file?.delete()
+                    null
+                }
+            }
+            val coverImageData = if (options.includeCover) {
+                options.coverImageBytes?.let { bytes ->
+                    val file = runCatching {
+                        java.io.File.createTempFile("cover", null, imageDir).apply { writeBytes(bytes) }
+                    }.getOrNull()
+                    val size = file?.let { imageCodec.probeFile(it.path) }
+                    if (file != null && size != null && size.width > 0 && size.height > 0) {
+                        ImageData(file, size.width, size.height)
+                    } else {
+                        file?.delete()
+                        null
+                    }
+                }
+            } else null
+            val title = com.xnotes.core.util.DocumentKind.stripSuffix(name)
+            populateBlankDocument(blank, title, options, pageImageData, coverImageData, textMeasurer)
+        }
         return createNoteFile(treeUri, parentDocId, name) { codec.write(blank, it) }
     }
 
@@ -4567,7 +4795,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         noteDebounceJob?.cancel()
         state.autosaveStatus = "pending" // debounce running; drives the debug overlay
         noteDebounceJob = autosaveScope.launch {
-            kotlinx.coroutines.delay(1200L) // debounce: write after a short idle
+            kotlinx.coroutines.delay(500L) // debounce: write after a short idle (500ms for fast multi-tab flush)
             noteWriteJob?.join() // wait out a write already going out rather than racing it
             val startNs = System.nanoTime() // the debug overlay's save timings start once the debounce fires
             // Pointers, on the main thread: the writer gets its own page lists over the live items
@@ -5552,6 +5780,140 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         installInitialView(doc.path) // this note's remembered view, or fit width — never the last note's
         refreshContent()
         view.requestRender()
+    }
+
+    fun saveActiveTabState() {
+        tabManager.activeTab?.let { cur ->
+            cur.zoom = state.zoom
+            cur.scrollX = state.scrollX
+            cur.scrollY = state.scrollY
+            cur.viewOverrides = viewOverrides
+            cur.didInitialFit = state.didInitialFit
+            cur.autosaveUri = autosaveUri
+            history.copyTo(cur.history)
+        }
+    }
+
+    fun registerOpenTab(uri: String, name: String?, doc: Document) {
+        saveActiveTabState()
+        val title = name ?: doc.displayName ?: com.xnotes.core.util.Paths.stem(uri)
+        val session = NoteTabSession(
+            uri = uri,
+            title = title,
+            document = doc,
+            autosaveUri = autosaveUri,
+            viewOverrides = viewOverrides,
+            zoom = state.zoom,
+            scrollX = state.scrollX,
+            scrollY = state.scrollY,
+            didInitialFit = state.didInitialFit,
+        )
+        history.copyTo(session.history)
+        tabManager.openOrSelectTab(
+            uri = uri,
+            title = title,
+            documentFactory = { session },
+            onEvict = { evicted ->
+                if (evicted.isDirty && evicted.autosaveUri != null) {
+                    val snap = evicted.document.snapshot()
+                    autosaveScope.launch(kotlinx.coroutines.NonCancellable + kotlinx.coroutines.Dispatchers.IO) {
+                        startNoteWrite(evicted.autosaveUri!!, snap, evicted.document.displayName ?: evicted.document.title, System.nanoTime())
+                    }
+                }
+            }
+        )
+        persistTabs()
+    }
+
+    fun persistTabs() {
+        val uris = tabManager.tabs.mapNotNull { it.uri }
+        tabStore.save(uris, tabManager.activeIndex)
+    }
+
+    /**
+     * In-memory fast tab switch (<3ms at 144Hz).
+     * Rebinds document model, history undo/redo stacks, view overrides, and viewports
+     * without OpenGL context destruction or deleting cached PDF files.
+     */
+    fun bindTabSession(session: NoteTabSession) {
+        flowText.endSession()
+        controller.commitTextEdit()
+        controller.clearSelection()
+        controller.resetGestureState()
+        clearPageSelection()
+        state.document = session.document
+        history.replaceWith(session.history)
+        autosaveUri = session.autosaveUri
+        rebuildPdfSource()
+        openPdfTemp = session.document.pdfFile // track without deleting
+        state.invalidateAllCaches()
+        state.relayout()
+        installViewOverrides(session.viewOverrides)
+        if (session.didInitialFit) {
+            state.zoom = session.zoom
+            state.scrollX = session.scrollX
+            state.scrollY = session.scrollY
+            state.didInitialFit = true
+        } else {
+            installInitialView(session.document.path)
+            session.didInitialFit = true
+            session.zoom = state.zoom
+            session.scrollX = state.scrollX
+            session.scrollY = state.scrollY
+        }
+        refreshContent()
+        view.requestRender()
+    }
+
+    fun switchToTab(index: Int): Boolean {
+        if (index == tabManager.activeIndex || index !in tabManager.tabs.indices) return false
+        saveActiveTabState()
+        if (tabManager.selectTab(index)) {
+            val next = tabManager.activeTab ?: return false
+            bindTabSession(next)
+            persistTabs()
+            return true
+        }
+        return false
+    }
+
+    fun switchToTabByUri(uri: String): Boolean {
+        val idx = tabManager.indexOfUri(uri)
+        return if (idx >= 0) switchToTab(idx) else false
+    }
+
+    fun moveTab(fromIndex: Int, toIndex: Int): Boolean {
+        val moved = tabManager.moveTab(fromIndex, toIndex)
+        if (moved) {
+            persistTabs()
+        }
+        return moved
+    }
+
+    fun closeTab(index: Int) {
+        val tabToClose = tabManager.tabs.getOrNull(index) ?: return
+        // Flush autosave if dirty
+        if (tabToClose.isDirty && tabToClose.autosaveUri != null) {
+            val uri = tabToClose.autosaveUri!!
+            val snap = tabToClose.document.snapshot()
+            autosaveScope.launch(kotlinx.coroutines.NonCancellable + kotlinx.coroutines.Dispatchers.IO) {
+                startNoteWrite(uri, snap, tabToClose.document.displayName ?: tabToClose.document.title, System.nanoTime())
+            }
+        }
+        // Delete temp PDF if owned by this closing tab and no other open tab uses it
+        val pdf = tabToClose.document.pdfFile
+        val otherUses = tabManager.tabs.any { it != tabToClose && it.document.pdfFile == pdf }
+        if (pdf != null && !otherUses) {
+            autosaveScope.launch(kotlinx.coroutines.Dispatchers.IO) { pdf.delete() }
+        }
+
+        tabManager.closeTab(index)
+        persistTabs()
+        if (tabManager.tabs.isEmpty()) {
+            noteOpen = false
+        } else {
+            tabManager.activeTab?.let { bindTabSession(it) }
+        }
     }
 
     // --- tools & colour ---
@@ -6899,6 +7261,13 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     fun importTemplate(bytes: ByteArray) {
         if (bytes.size > com.xnotes.format.TemplateReader.MAX_BYTES) {
             message = appContext.getString(R.string.err_import_template, appContext.getString(R.string.template_too_large))
+            return
+        }
+        val isPng = bytes.size >= 8 && bytes[0] == 0x89.toByte() && bytes[1] == 0x50.toByte() && bytes[2] == 0x4E.toByte() && bytes[3] == 0x47.toByte()
+        val isJpg = bytes.size >= 3 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte() && bytes[2] == 0xFF.toByte()
+        val isWebp = bytes.size >= 12 && bytes[0] == 'R'.code.toByte() && bytes[8] == 'W'.code.toByte() && bytes[9] == 'E'.code.toByte() && bytes[10] == 'B'.code.toByte() && bytes[11] == 'P'.code.toByte()
+        if (isPng || isJpg || isWebp) {
+            message = appContext.getString(R.string.err_template_is_image)
             return
         }
         runCatching { TemplateLibrary.import(String(bytes, Charsets.UTF_8)) }

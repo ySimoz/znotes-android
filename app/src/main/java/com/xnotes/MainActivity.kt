@@ -97,13 +97,13 @@ import com.xnotes.ui.icons.XnotesIcons
 import com.xnotes.ui.theme.LocalPalette
 import com.xnotes.ui.theme.XnotesTheme
 import com.xnotes.ui.theme.toComposeColor
+import androidx.lifecycle.lifecycleScope
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** Minimum time the launch loader stays up, so its animation is briefly seen even
- *  when the session restores instantly. */
-private const val MIN_LOADER_MS = 600L
+
 
 /** How long the maths waits for the font bytes it measures with before going without. */
 private const val MATH_FONT_WAIT_MS = 1500L
@@ -151,8 +151,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        com.xnotes.platform.FontCatalog.init(this)
-        com.xnotes.platform.TemplateLibrary.init(this)
+        unlockHighRefreshRate()
+        lifecycleScope.launch(Dispatchers.IO) {
+            com.xnotes.platform.FontCatalog.init(applicationContext)
+            com.xnotes.platform.TemplateLibrary.init(applicationContext)
+        }
         setTheme(com.xnotes.R.style.Theme_Xnotes) // leave the dark launch/splash theme behind
         applyFullscreen(!deviceHasDisplayCutout(this)) // provisional; reconciled once the editor loads prefs
         pendingPdfImport = pdfImportUri(intent)
@@ -160,14 +163,12 @@ class MainActivity : ComponentActivity() {
             val context = LocalContext.current
             val ed = remember { Editor(context).also { editor = it } }
             LaunchedEffect(ed.fullscreen) { applyFullscreen(ed.fullscreen) }
+            val hasSession = remember { ed.hasSavedSession }
             var ready by remember { mutableStateOf(false) }
             LaunchedEffect(Unit) {
-                val start = android.os.SystemClock.uptimeMillis()
-                ed.restoreSession() // heavy load off-thread; loader animates meanwhile
-                val elapsed = android.os.SystemClock.uptimeMillis() - start
-                if (elapsed < MIN_LOADER_MS) kotlinx.coroutines.delay(MIN_LOADER_MS - elapsed)
+                if (hasSession) ed.restoreSession()
                 ready = true
-                ed.prewarmBackstage() // warm recents/explorer caches so the first backstage open is instant
+                ed.prewarmBackstage()
             }
             val currentLanguage = ed.appLanguage
             LaunchedEffect(currentLanguage) {
@@ -202,22 +203,25 @@ class MainActivity : ComponentActivity() {
             }
             val activityResources = context.resources
             remember(targetLocale) {
-                java.util.Locale.setDefault(targetLocale)
-                val conf = android.content.res.Configuration(activityResources.configuration).apply {
-                    if (currentLanguage == "system") {
-                        setLocales(android.content.res.Resources.getSystem().configuration.locales)
-                    } else {
-                        setLocales(android.os.LocaleList(targetLocale))
+                val currentPrimaryLocale = activityResources.configuration.locales.get(0)
+                if (currentPrimaryLocale != targetLocale) {
+                    java.util.Locale.setDefault(targetLocale)
+                    val conf = android.content.res.Configuration(activityResources.configuration).apply {
+                        if (currentLanguage == "system") {
+                            setLocales(android.content.res.Resources.getSystem().configuration.locales)
+                        } else {
+                            setLocales(android.os.LocaleList(targetLocale))
+                        }
+                        setLayoutDirection(targetLocale)
                     }
-                    setLayoutDirection(targetLocale)
+                    @Suppress("DEPRECATION")
+                    activityResources.updateConfiguration(conf, activityResources.displayMetrics)
+                    @Suppress("DEPRECATION")
+                    context.applicationContext.resources.updateConfiguration(conf, context.applicationContext.resources.displayMetrics)
                 }
-                @Suppress("DEPRECATION")
-                activityResources.updateConfiguration(conf, activityResources.displayMetrics)
-                @Suppress("DEPRECATION")
-                context.applicationContext.resources.updateConfiguration(conf, context.applicationContext.resources.displayMetrics)
             }
             val localizedContext = remember(localizedConfig, context) {
-                context.createConfigurationContext(localizedConfig)
+                if (currentLanguage == "system") context else context.createConfigurationContext(localizedConfig)
             }
             XnotesTheme(ed.palette, ed.cornerStyle) {
                 CompositionLocalProvider(
@@ -243,6 +247,23 @@ class MainActivity : ComponentActivity() {
                             com.xnotes.ui.XnotesLoader()
                         }
                     }
+                }
+            }
+        }
+    }
+
+    /** Negotiate the highest available refresh rate (e.g. 120Hz/144Hz) so UI and stylus match high-FPS panels. */
+    private fun unlockHighRefreshRate() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val display = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) display else {
+                @Suppress("DEPRECATION")
+                (getSystemService(Context.WINDOW_SERVICE) as? WindowManager)?.defaultDisplay
+            }
+            val maxMode = display?.supportedModes?.maxByOrNull { it.refreshRate }
+            if (maxMode != null && maxMode.refreshRate > 60f) {
+                window.attributes = window.attributes.apply {
+                    preferredDisplayModeId = maxMode.modeId
+                    preferredRefreshRate = maxMode.refreshRate
                 }
             }
         }
@@ -530,6 +551,57 @@ private fun EditorScreen(
         }
     }
 
+    // Both asset pickers accept batches, but only the first readable image is selected
+    // for the new note. All readable images are saved in the corresponding library.
+    fun importCreationImages(uris: List<Uri>, kind: com.xnotes.platform.CustomAssetFolders.Kind) {
+        if (uris.isEmpty()) return
+        scope.launch {
+            val root = editor.browseRoot
+            val (selected, imported, failed) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                var firstBytes: ByteArray? = null
+                var count = 0
+                var fail = 0
+                for (uri in uris) {
+                    val bytes = runCatching { resolver.openInputStream(uri)?.use { it.readBytes() } }
+                        .getOrNull()?.takeIf { it.isNotEmpty() }
+                    if (bytes == null) {
+                        fail++
+                        continue
+                    }
+                    if (firstBytes == null) firstBytes = bytes
+                    val name = displayNameOf(resolver, uri)
+                    if (com.xnotes.platform.CustomAssetFolders.storeImage(context, root, bytes, name, kind)) {
+                        count++
+                    } else {
+                        fail++
+                    }
+                }
+                Triple(firstBytes, count, fail)
+            }
+            if (selected != null) {
+                if (kind == com.xnotes.platform.CustomAssetFolders.Kind.COVER) {
+                    editor.noteCreationCoverImageBytes = selected
+                } else {
+                    editor.noteCreationPageImageBytes = selected
+                }
+            }
+            if (imported > 0) editor.customAssetsChanged()
+            editor.message = when {
+                imported > 0 -> context.getString(R.string.create_images_imported, imported, failed)
+                selected == null -> context.getString(R.string.err_read_image)
+                else -> context.getString(R.string.create_images_not_saved)
+            }
+        }
+    }
+
+    val pickCreationCoverLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        importCreationImages(uris, com.xnotes.platform.CustomAssetFolders.Kind.COVER)
+    }
+
+    val pickCreationPageImageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        importCreationImages(uris, com.xnotes.platform.CustomAssetFolders.Kind.PAGE)
+    }
+
     // A user Helix code theme (.toml), parsed + stored by the editor.
     val importCodeThemeLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -543,6 +615,11 @@ private fun EditorScreen(
     // A user page template (.xtemplate), checked and stored in the template library.
     val importTemplateLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
+            val name = displayNameOf(resolver, uri).orEmpty().lowercase()
+            if (name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".webp")) {
+                editor.message = context.getString(R.string.err_template_is_image)
+                return@rememberLauncherForActivityResult
+            }
             runCatching { resolver.openInputStream(uri)?.use { it.readBytes() } }
                 .getOrNull()
                 ?.let { editor.importTemplate(it) }
@@ -893,6 +970,9 @@ private fun EditorScreen(
                 onExitApp = { (context as? android.app.Activity)?.finish() },
                 onImportCodeTheme = { importCodeThemeLauncher.launch(arrayOf("*/*")) },
                 onImportFont = { importFontLauncher.launch(arrayOf("*/*")) },
+                onImportTemplate = { importTemplateLauncher.launch(arrayOf("*/*")) },
+                onPickCoverImage = { pickCreationCoverLauncher.launch(arrayOf("image/*")) },
+                onPickPageImage = { pickCreationPageImageLauncher.launch(arrayOf("image/*")) },
                 onImportPdf = { importPdfLauncher.launch(arrayOf("application/pdf")) },
                 onOpenFile = { uri -> guarded(editor) { openTreeFile(uri) } },
                 onPickRoot = { pickRootLauncher.launch(null) },
@@ -1255,6 +1335,19 @@ private fun EditorPane(
                     .fillMaxWidth()
                     .height(2.dp)
                     .background((if (focused) palette.accent else palette.border).toComposeColor()),
+            )
+        }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = !editor.canvasOpen && !editor.fullscreen && editor.tabManager.count > 0,
+            enter = androidx.compose.animation.expandVertically(),
+            exit = androidx.compose.animation.shrinkVertically(),
+        ) {
+            com.xnotes.ui.NoteTabBar(
+                tabManager = editor.tabManager,
+                onSelectTab = { index -> editor.switchToTab(index) },
+                onCloseTab = { index -> editor.closeTab(index) },
+                onAddTab = { actions.onOpenBackstage() },
+                onMoveTab = { from, to -> editor.moveTab(from, to) },
             )
         }
         if (editor.canvasOpen) {

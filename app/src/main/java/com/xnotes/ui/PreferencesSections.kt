@@ -75,15 +75,13 @@ internal fun GeneralPreferencesSection(
     val palette = LocalPalette.current
     SectionTitle(stringResource(R.string.pref_general))
     FieldLabel(stringResource(R.string.pref_language))
-    val languageOptions = remember {
-        listOf(
-            "system" to R.string.language_system,
-            "en" to R.string.language_en,
-            "it" to R.string.language_it,
-            "zh-Hans" to R.string.language_zh_hans,
-        )
-    }
-    OptionDropdown(languageOptions.map { (code, res) -> code to stringResource(res) }, prefs.appLanguage) {
+    val languageOptions = listOf(
+        "system" to stringResource(R.string.language_system),
+        "en" to stringResource(R.string.language_en),
+        "it" to stringResource(R.string.language_it),
+        "zh-Hans" to stringResource(R.string.language_zh_hans),
+    )
+    OptionDropdown(languageOptions, prefs.appLanguage) {
         onUpdate(prefs.copy(appLanguage = it))
     }
     FieldLabel(stringResource(R.string.pref_ui_theme))
@@ -156,7 +154,7 @@ internal fun InputPreferencesSection(
             onUpdate(prefs.copy(penButtonHover = it))
         }
     }
-    val tapOptions = remember { tapGestureOptions.map { (id, res) -> id to res } }.map { (id, res) -> id to stringResource(res) }
+    val tapOptions = tapGestureOptions.map { (id, res) -> id to stringResource(res) }
     FieldLabel(stringResource(R.string.pref_two_finger_tap))
     OptionDropdown(tapOptions, prefs.twoFingerTap) { onUpdate(prefs.copy(twoFingerTap = it)) }
     FieldLabel(stringResource(R.string.pref_three_finger_tap))
@@ -473,32 +471,19 @@ internal fun FontsPreferencesSection(
 }
 
 /**
- * Toolbar preferences section: style, positioning, sizing, swatch slider, and toolbar customizer layout.
+ * Toolbar style, position, sizing, and swatch controls (the top part of toolbar preferences).
  */
 @Composable
-internal fun ToolbarPreferencesSection(
+internal fun ToolbarControlsSection(
     prefs: Preferences,
     editor: Editor,
     canvasTab: Boolean,
     onSelectCanvasTab: (Boolean) -> Unit,
     onUpdateHome: (Preferences) -> Unit,
     onApplyEdited: (ToolbarLayout) -> Unit,
-    dragItem: ToolbarItem?,
-    dropTarget: Pair<Int, Int>?,
-    dragSection: Int?,
-    sectionDropTarget: Int?,
-    chipBounds: MutableMap<ToolbarItem, Rect>,
-    sectionBounds: MutableMap<Int, Rect>,
-    sectionGrabBounds: MutableMap<Int, Rect>,
-    onClearDrag: () -> Unit,
-    onStartItemDrag: (ToolbarItem, Offset) -> Unit,
-    onMoveItemDrag: (Offset) -> Unit,
-    onStartSectionDrag: (Int, Offset) -> Unit,
-    onMoveSectionDrag: (Offset) -> Unit,
 ) {
     val palette = LocalPalette.current
     val look = prefs.toolbarLook
-    val layout = if (canvasTab) editor.canvasToolbarLayout else editor.toolbarLayout
 
     HorizontalDivider(color = palette.border.toComposeColor())
     SectionTitle(stringResource(R.string.pref_toolbar))
@@ -548,15 +533,50 @@ internal fun ToolbarPreferencesSection(
         }
     }
     Text(stringResource(R.string.pref_toolbar_help), color = palette.textDim.toComposeColor(), fontSize = 12.sp)
+}
+
+/**
+ * Toolbar preferences section: style, positioning, sizing, swatch slider, and toolbar customizer layout.
+ */
+@Composable
+internal fun ToolbarPreferencesSection(
+    prefs: Preferences,
+    editor: Editor,
+    canvasTab: Boolean,
+    onSelectCanvasTab: (Boolean) -> Unit,
+    onUpdateHome: (Preferences) -> Unit,
+    onApplyEdited: (ToolbarLayout) -> Unit,
+    dragItem: ToolbarItem?,
+    dropTarget: Pair<Int, Int>?,
+    dragSection: Int?,
+    sectionDropTarget: Int?,
+    chipCoords: MutableMap<ToolbarItem, androidx.compose.ui.layout.LayoutCoordinates>,
+    sectionCoords: MutableMap<Int, androidx.compose.ui.layout.LayoutCoordinates>,
+    sectionGrabCoords: MutableMap<Int, androidx.compose.ui.layout.LayoutCoordinates>,
+    onClearDrag: () -> Unit,
+    onStartItemDrag: (ToolbarItem, Offset) -> Unit,
+    onMoveItemDrag: (Offset) -> Unit,
+    onStartSectionDrag: (Int, Offset) -> Unit,
+    onMoveSectionDrag: (Offset) -> Unit,
+) {
+    val layout = if (canvasTab) editor.canvasToolbarLayout else editor.toolbarLayout
+    ToolbarControlsSection(
+        prefs = prefs,
+        editor = editor,
+        canvasTab = canvasTab,
+        onSelectCanvasTab = onSelectCanvasTab,
+        onUpdateHome = onUpdateHome,
+        onApplyEdited = onApplyEdited,
+    )
     ToolbarCustomizerBody(
         layout = layout,
         dragItem = dragItem,
         dropTarget = dropTarget,
         dragSection = dragSection,
         sectionDropTarget = sectionDropTarget,
-        chipBounds = chipBounds,
-        sectionBounds = sectionBounds,
-        sectionGrabBounds = sectionGrabBounds,
+        chipCoords = chipCoords,
+        sectionCoords = sectionCoords,
+        sectionGrabCoords = sectionGrabCoords,
         onToggle = { s, i -> onApplyEdited(layout.toggleVisible(s, i)) },
         onDelete = { s -> onApplyEdited(layout.removeSection(s)) },
         onAdd = { onApplyEdited(layout.addSection()) },

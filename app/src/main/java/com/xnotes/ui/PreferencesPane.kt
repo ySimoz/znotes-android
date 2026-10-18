@@ -22,9 +22,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -142,7 +141,7 @@ fun PreferencesPane(
     // Follow out-of-pane preference changes too (the .scm import round-trips a picker).
     LaunchedEffect(editor.prefsVersion) { prefs = editor.preferences }
 
-    val lazyListState = rememberLazyListState()
+    val scrollState = rememberScrollState()
     // Which bar the toolbar section is arranging. The two are separate layouts, so the drag state
     // below always belongs to whichever is on screen.
     var canvasTab by remember { mutableStateOf(false) }
@@ -154,9 +153,9 @@ fun PreferencesPane(
     var dragFinger by remember { mutableStateOf(Offset.Zero) }
     var dragGrab by remember { mutableStateOf(Offset.Zero) }
     var dropTarget by remember { mutableStateOf<Pair<Int, Int>?>(null) }
-    val chipBounds = remember { mutableMapOf<ToolbarItem, Rect>() }
-    val sectionBounds = remember { mutableMapOf<Int, Rect>() }
-    val sectionGrabBounds = remember { mutableMapOf<Int, Rect>() }
+    val chipCoords = remember { mutableMapOf<ToolbarItem, androidx.compose.ui.layout.LayoutCoordinates>() }
+    val sectionCoords = remember { mutableMapOf<Int, androidx.compose.ui.layout.LayoutCoordinates>() }
+    val sectionGrabCoords = remember { mutableMapOf<Int, androidx.compose.ui.layout.LayoutCoordinates>() }
     // Section-drag state (the whole card, by its grip handle); shares the finger/grab with the
     // chip drag since only one gesture runs at a time. The drop slot is an insertion index.
     var dragSection by remember { mutableStateOf<Int?>(null) }
@@ -168,19 +167,19 @@ fun PreferencesPane(
         if (canvasTab) editor.applyCanvasToolbarLayout(next) else editor.applyToolbarLayout(next)
     }
     fun retarget() {
-        dropTarget = toolbarDropTarget(editedLayout(), dragFinger, chipBounds, sectionBounds)
+        dropTarget = toolbarDropTarget(editedLayout(), dragFinger, chipCoords, sectionCoords)
     }
     fun retargetSection() {
-        sectionDropTarget = toolbarSectionDropTarget(editedLayout(), dragFinger, sectionBounds)
+        sectionDropTarget = toolbarSectionDropTarget(editedLayout(), dragFinger, sectionCoords)
     }
     fun showTab(canvas: Boolean) {
         if (canvasTab == canvas) return
         canvasTab = canvas
         // The bounds maps are keyed by item and the two bars share most items, so stale entries
         // from the other tab would aim a drop at a chip that is no longer there.
-        chipBounds.clear()
-        sectionBounds.clear()
-        sectionGrabBounds.clear()
+        chipCoords.clear()
+        sectionCoords.clear()
+        sectionGrabCoords.clear()
         dragItem = null
         dragSection = null
         dropTarget = null
@@ -217,124 +216,153 @@ fun PreferencesPane(
             TextButton(onClick = { update(Preferences()) }) { Text(stringResource(R.string.reset_to_defaults), fontSize = 13.sp) }
         }
         Spacer(Modifier.height(12.dp))
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().imePadding()
-                .onGloballyPositioned { viewport = it.boundsInRoot() },
-            state = lazyListState,
+        Column(
+            modifier = Modifier.fillMaxSize().imePadding().verticalScroll(scrollState)
+                .onGloballyPositioned {
+                    if (viewport == Rect.Zero || dragItem != null || dragSection != null) {
+                        viewport = it.boundsInRoot()
+                    }
+                },
             verticalArrangement = Arrangement.spacedBy(14.dp),
-            contentPadding = PaddingValues(bottom = 24.dp),
         ) {
-            item(key = "general") {
-                GeneralPreferencesSection(
-                    prefs = prefs,
-                    fullscreen = editor.fullscreen,
-                    onToggleFullscreen = { editor.setFullscreenPref(it) },
-                    onUpdate = ::update,
-                    onUpdateHome = ::updateHome,
-                )
-            }
-            item(key = "input") {
-                InputPreferencesSection(prefs = prefs, onUpdate = ::update)
-            }
-            item(key = "new_notes") {
-                NewNotesPreferencesSection(
-                    prefs = prefs,
-                    stemPreview = "${editor.newNoteStem(emptySet())}.xnote",
-                    onUpdate = ::update,
-                )
-            }
-            item(key = "page") {
-                PagePreferencesSection(prefs = prefs, onUpdate = ::update)
-            }
-            item(key = "explorer") {
-                ExplorerPreferencesSection(
-                    prefs = prefs,
-                    editor = editor,
-                    onUpdateHome = ::updateHome,
-                    onNameColor = { namingColor = it },
-                )
-            }
-            item(key = "pdf_export") {
-                PdfExportPreferencesSection(prefs = prefs, onUpdateHome = ::updateHome)
-            }
-            item(key = "performance") {
-                PerformancePreferencesSection(prefs = prefs, onUpdate = ::update)
-            }
+            GeneralPreferencesSection(
+                prefs = prefs,
+                fullscreen = editor.fullscreen,
+                onToggleFullscreen = { editor.setFullscreenPref(it) },
+                onUpdate = ::update,
+                onUpdateHome = ::updateHome,
+            )
+            InputPreferencesSection(prefs = prefs, onUpdate = ::update)
+            NewNotesPreferencesSection(
+                prefs = prefs,
+                stemPreview = "${editor.newNoteStem(emptySet())}.xnote",
+                onUpdate = ::update,
+            )
+            PagePreferencesSection(prefs = prefs, onUpdate = ::update)
+            ExplorerPreferencesSection(
+                prefs = prefs,
+                editor = editor,
+                onUpdateHome = ::updateHome,
+                onNameColor = { namingColor = it },
+            )
+            PdfExportPreferencesSection(prefs = prefs, onUpdateHome = ::updateHome)
+            PerformancePreferencesSection(prefs = prefs, onUpdate = ::update)
             if (editor.treeSitterAvailable) {
-                item(key = "code_highlighting") {
-                    CodeHighlightingPreferencesSection(
-                        prefs = prefs,
-                        editor = editor,
-                        onUpdate = ::update,
-                        onImportCodeTheme = onImportCodeTheme,
-                    )
-                }
-            }
-            item(key = "fonts") {
-                FontsPreferencesSection(
-                    customFonts = editor.customFonts,
-                    onImportFont = onImportFont,
-                    onRemoveFont = { editor.removeCustomFont(it) },
-                )
-            }
-            item(key = "toolbar") {
-                ToolbarPreferencesSection(
+                CodeHighlightingPreferencesSection(
                     prefs = prefs,
                     editor = editor,
-                    canvasTab = canvasTab,
-                    onSelectCanvasTab = ::showTab,
-                    onUpdateHome = ::updateHome,
-                    onApplyEdited = ::applyEdited,
-                    dragItem = dragItem,
-                    dropTarget = dropTarget,
-                    dragSection = dragSection,
-                    sectionDropTarget = sectionDropTarget,
-                    chipBounds = chipBounds,
-                    sectionBounds = sectionBounds,
-                    sectionGrabBounds = sectionGrabBounds,
-                    onClearDrag = {
-                        dragItem = null
-                        dragSection = null
-                        dropTarget = null
-                        sectionDropTarget = null
-                    },
-                    onStartItemDrag = { item, local ->
-                        dragItem = item
-                        dragGrab = local
-                        dragFinger = (chipBounds[item]?.topLeft ?: Offset.Zero) + local
-                        retarget()
-                    },
-                    onMoveItemDrag = { delta ->
-                        dragFinger += delta
-                        retarget()
-                    },
-                    onStartSectionDrag = { sec, local ->
-                        dragSection = sec
-                        val grab = sectionGrabBounds[sec]?.topLeft ?: sectionBounds[sec]?.topLeft ?: Offset.Zero
-                        val card = sectionBounds[sec]?.topLeft ?: Offset.Zero
-                        dragFinger = grab + local
-                        dragGrab = dragFinger - card
-                        retargetSection()
-                    },
-                    onMoveSectionDrag = { delta ->
-                        dragFinger += delta
-                        retargetSection()
-                    },
+                    onUpdate = ::update,
+                    onImportCodeTheme = onImportCodeTheme,
                 )
             }
+            FontsPreferencesSection(
+                customFonts = editor.customFonts,
+                onImportFont = onImportFont,
+                onRemoveFont = { editor.removeCustomFont(it) },
+            )
+            ToolbarControlsSection(
+                prefs = prefs,
+                editor = editor,
+                canvasTab = canvasTab,
+                onSelectCanvasTab = ::showTab,
+                onUpdateHome = ::updateHome,
+                onApplyEdited = ::applyEdited,
+            )
+            ToolbarCustomizerBody(
+                layout = layout,
+                dragItem = dragItem,
+                dropTarget = dropTarget,
+                dragSection = dragSection,
+                sectionDropTarget = sectionDropTarget,
+                chipCoords = chipCoords,
+                sectionCoords = sectionCoords,
+                sectionGrabCoords = sectionGrabCoords,
+                onToggle = { s, i -> applyEdited(editedLayout().toggleVisible(s, i)) },
+                onDelete = { s -> applyEdited(editedLayout().removeSection(s)) },
+                onAdd = { applyEdited(editedLayout().addSection()) },
+                onDragStart = { item, local ->
+                    dragItem = item
+                    dragGrab = local
+                    val b = chipCoords[item]?.takeIf { it.isAttached }?.boundsInRoot()
+                    dragFinger = (b?.topLeft ?: Offset.Zero) + local
+                    retarget()
+                },
+                onDrag = { delta ->
+                    dragFinger += delta
+                    retarget()
+                },
+                onDrop = {
+                    val target = dropTarget
+                    val moving = dragItem
+                    if (target != null && moving != null) {
+                        val cur = editedLayout()
+                        val fSec = cur.sections.indexOfFirst { s -> s.entries.any { it.item == moving } }
+                        val fIdx = if (fSec >= 0) cur.sections[fSec].entries.indexOfFirst { it.item == moving } else -1
+                        if (fSec >= 0 && fIdx >= 0) {
+                            applyEdited(cur.moveItem(fSec, fIdx, target.first, target.second))
+                        }
+                    }
+                    dragItem = null
+                    dragSection = null
+                    dropTarget = null
+                    sectionDropTarget = null
+                },
+                onCancel = {
+                    dragItem = null
+                    dragSection = null
+                    dropTarget = null
+                    sectionDropTarget = null
+                },
+                onSectionDragStart = { sec, local ->
+                    dragSection = sec
+                    val grab = sectionGrabCoords[sec]?.takeIf { it.isAttached }?.boundsInRoot()?.topLeft
+                        ?: sectionCoords[sec]?.takeIf { it.isAttached }?.boundsInRoot()?.topLeft
+                        ?: Offset.Zero
+                    val card = sectionCoords[sec]?.takeIf { it.isAttached }?.boundsInRoot()?.topLeft ?: Offset.Zero
+                    dragFinger = grab + local
+                    dragGrab = dragFinger - card
+                    retargetSection()
+                },
+                onSectionDrag = { delta ->
+                    dragFinger += delta
+                    retargetSection()
+                },
+                onSectionDrop = {
+                    val from = dragSection
+                    val insertAt = sectionDropTarget
+                    if (from != null && insertAt != null) {
+                        val cur = editedLayout()
+                        val to = (if (insertAt > from) insertAt - 1 else insertAt).coerceIn(0, cur.sections.lastIndex)
+                        if (to != from) applyEdited(cur.moveSection(from, to))
+                    }
+                    dragItem = null
+                    dragSection = null
+                    dropTarget = null
+                    sectionDropTarget = null
+                },
+                onSectionCancel = {
+                    dragItem = null
+                    dragSection = null
+                    dropTarget = null
+                    sectionDropTarget = null
+                },
+            )
+            Spacer(Modifier.height(24.dp))
         }
     }
         // The dragged chip/section's floating copy: a pane-root sibling so the scroll never clips it.
-        val gx = (dragFinger.x - dragGrab.x - paneTopLeft.x).toInt()
-        val gy = (dragFinger.y - dragGrab.y - paneTopLeft.y).toInt()
         val ghostChip = dragItem
         val ghostSecIdx = dragSection
         if (ghostChip != null) {
+            val gx = (dragFinger.x - dragGrab.x - paneTopLeft.x).toInt()
+            val gy = (dragFinger.y - dragGrab.y - paneTopLeft.y).toInt()
             Box(Modifier.offset { IntOffset(gx, gy) }) { ToolbarDragGhost(ghostChip) }
         } else if (ghostSecIdx != null) {
+            val gx = (dragFinger.x - dragGrab.x - paneTopLeft.x).toInt()
+            val gy = (dragFinger.y - dragGrab.y - paneTopLeft.y).toInt()
             val sectionG = (if (canvasTab) editor.canvasToolbarLayout else editor.toolbarLayout)
                 .sections.getOrNull(ghostSecIdx)
-            val widthG = sectionBounds[ghostSecIdx]?.width
+            val widthG = sectionCoords[ghostSecIdx]?.takeIf { it.isAttached }?.boundsInRoot()?.width
             if (sectionG != null && widthG != null) {
                 Box(Modifier.offset { IntOffset(gx, gy) }) { SectionCardGhost(sectionG, widthG) }
             }
@@ -353,7 +381,7 @@ fun PreferencesPane(
                 else -> 0f
             }
             if (delta != 0f) {
-                lazyListState.scrollBy(delta)
+                scrollState.scrollBy(delta)
                 if (dragItem != null) retarget() else retargetSection()
             }
             delay(16L)

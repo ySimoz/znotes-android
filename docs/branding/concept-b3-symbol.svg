@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <pattern id="pat_b3" width="16" height="16" patternTransform="rotate(-45)" patternUnits="userSpaceOnUse">
+      <rect width="16" height="16" fill="#08090C" />
+      <line x1="0" y1="0" x2="0" y2="16" stroke="#181E29" stroke-width="4" />
+    </pattern>
+  </defs>
+  <rect width="256" height="256" fill="url(#pat_b3)" rx="44" />
+  <g id="mark">
+    <!-- Orange Glitch Underlayer -->
+    <path d="M 76,64 L 204,64 L 192,96 L 184,96 L 120,164 L 186,164 L 174,196 L 50,196 L 62,164 L 73.309529880285,164 L 137.309529880285,96 L 64,96 Z" fill="#FF944A" transform="translate(-15, -3)" />
+    
+    <!-- Cyan Primary Layer -->
+    <path d="M 76,64 L 204,64 L 192,96 L 184,96 L 120,164 L 186,164 L 174,196 L 50,196 L 62,164 L 73.309529880285,164 L 137.309529880285,96 L 64,96 Z" fill="#1DAEF5" />
+    
+    <!-- White Accent Wedge -->
+    <path d="M 50,196 L 102,196 L 114,164 L 62,164 Z" fill="#FF944A" transform="translate(-15, -3)" opacity="0.5" />
+    <path d="M 50,196 L 102,196 L 114,164 L 62,164 Z" fill="#FFFFFF" />
+  </g>
+</svg>

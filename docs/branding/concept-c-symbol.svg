@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <pattern id="pat_c" width="14.0" height="14.0" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <rect width="14.0" height="14.0" fill="#090B0E" />
+      <line x1="0" y1="0" x2="0" y2="14.0" stroke="#1B222E" stroke-width="3.5" />
+    </pattern>
+  </defs>
+  <rect width="256" height="256" fill="url(#pat_c)" rx="44" />
+  <g id="mark">
+    <!-- Orange Layer -->
+    <path d="M 54,58 L 204,58 L 204,96 L 148,96 L 100,154 L 198,154 L 198,198 L 52,198 L 52,160 L 106,160 L 154,96 L 54,96 Z" fill="#FF944A" transform="translate(-16, 0)" />
+    <rect x="44" y="120" width="166" height="16" fill="#FF944A" transform="translate(-12, 0)" opacity="0.9" />
+    
+    <!-- Cyan Layer -->
+    <path d="M 54,58 L 204,58 L 204,96 L 148,96 L 100,154 L 198,154 L 198,198 L 52,198 L 52,160 L 106,160 L 154,96 L 54,96 Z" fill="#1DAEF5" />
+    <rect x="56" y="120" width="166" height="16" fill="#1DAEF5" />
+    
+    <!-- White Foot -->
+    <path d="M 52,198 L 102,198 L 120,160 L 66,160 L 52,168 Z" fill="#FF944A" transform="translate(-16, 0)" opacity="0.6" />
+    <path d="M 52,198 L 102,198 L 120,160 L 66,160 L 52,168 Z" fill="#FFFFFF" />
+  </g>
+</svg>

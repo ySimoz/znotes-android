@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">xnotes</string>
+    <string name="app_name" translatable="false">zNotes</string>
 
     <!-- Tools and toolbar items -->
     <string name="tool_pen">Penna</string>
@@ -459,7 +459,7 @@
     <string name="save">Salva</string>
     <string name="create">Crea</string>
     <string name="err_save_that_note">Impossibile salvare questa nota.</string>
-    <string name="err_pdf_password">Il PDF è protetto da password, che xnotes non supporta.</string>
+    <string name="err_pdf_password">Il PDF è protetto da password, che zNotes non supporta.</string>
     <string name="err_create_folder">Impossibile creare la cartella.</string>
     <string name="err_create_canvas">Impossibile creare la lavagna.</string>
     <string name="err_create_note">Impossibile creare la nota.</string>
@@ -599,7 +599,7 @@
     <string name="err_clipboard_no_image">Nessuna immagine negli appunti da incollare.</string>
     <string name="err_read_sticker">Impossibile leggere l\'adesivo.</string>
     <string name="err_open_that_note">Impossibile aprire la nota.</string>
-    <string name="err_not_xnotes">Non è un documento xnotes valido.</string>
+    <string name="err_not_xnotes">Non è un documento zNotes valido.</string>
     <string name="err_open_note">Impossibile aprire la nota.</string>
     <string name="note_forked">Questa nota è stata modificata altrove. Le tue modifiche sono ora in “%1$s”.</string>
     <string name="canvas_forked">Questa lavagna è stata modificata altrove. Le tue modifiche sono ora in “%1$s”.</string>
@@ -664,11 +664,11 @@
     <!-- About -->
     <string name="app_tagline">Un\'applicazione di scrittura a mano libera e disegno per Android</string>
     <string name="copy_version">Copia versione</string>
-    <string name="help_make_better">Aiuta a migliorare xnotes</string>
+    <string name="help_make_better">Aiuta a migliorare zNotes</string>
     <string name="report_bug">Segnala un bug</string>
     <string name="request_feature">Suggerisci una funzione</string>
     <string name="sponsor">Supporta</string>
-    <string name="enjoying_xnotes">Ti piace xnotes? </string>
+    <string name="enjoying_xnotes">Ti piace zNotes? </string>
     <string name="star_on_github">Lascia una stella su GitHub</string>
     <string name="mit_license">Licenza MIT</string>
     <string name="version_n">Versione %1$s</string>

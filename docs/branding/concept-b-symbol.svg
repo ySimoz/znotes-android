@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <pattern id="pat_b" width="16" height="16" patternTransform="rotate(-45)" patternUnits="userSpaceOnUse">
+      <rect width="16" height="16" fill="#08090C" />
+      <line x1="0" y1="0" x2="0" y2="16" stroke="#181E29" stroke-width="4" />
+    </pattern>
+  </defs>
+  <rect width="256" height="256" fill="url(#pat_b)" rx="44" />
+  <g id="mark">
+    <!-- Orange Offset (-18, -4) -->
+    <path d="M 74,58 L 208,58 L 194,100 L 146,100 L 96,154 L 186,154 L 174,198 L 46,198 L 60,154 L 110,154 L 160,100 L 88,100 Z" fill="#FF944A" transform="translate(-18, -4)" />
+    
+    <!-- Cyan Layer -->
+    <path d="M 74,58 L 208,58 L 194,100 L 146,100 L 96,154 L 186,154 L 174,198 L 46,198 L 60,154 L 110,154 L 160,100 L 88,100 Z" fill="#1DAEF5" />
+    
+    <!-- White Terminal -->
+    <path d="M 46,198 L 98,198 L 116,154 L 60,154 Z" fill="#FF944A" transform="translate(-18, -4)" opacity="0.5" />
+    <path d="M 46,198 L 98,198 L 116,154 L 60,154 Z" fill="#FFFFFF" />
+  </g>
+</svg>

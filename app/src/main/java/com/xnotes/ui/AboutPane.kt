@@ -103,10 +103,10 @@ fun AboutPane() {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (appIcon != null) {
-                Image(appIcon, "xnotes", modifier = Modifier.size(72.dp))
+                Image(appIcon, "zNotes", modifier = Modifier.size(72.dp))
                 Spacer(Modifier.height(16.dp))
             }
-            Text("xnotes", color = palette.text.toComposeColor(), fontWeight = FontWeight.Bold, fontSize = 24.sp)
+            Text("zNotes", color = palette.text.toComposeColor(), fontWeight = FontWeight.Bold, fontSize = 24.sp)
             Spacer(Modifier.height(5.dp))
             Text(
                 stringResource(R.string.app_tagline),
@@ -217,7 +217,7 @@ private fun RowScope.AboutButton(icon: ImageVector, label: String, onClick: () -
 private fun copyVersion(ctx: Context, version: String) {
     runCatching {
         val clip = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clip.setPrimaryClip(ClipData.newPlainText("xnotes version", "xnotes $version"))
+        clip.setPrimaryClip(ClipData.newPlainText("zNotes version", "zNotes $version"))
         Toast.makeText(ctx, ctx.getString(R.string.version_copied), Toast.LENGTH_SHORT).show()
     }
 }
@@ -236,7 +236,7 @@ private fun bugReportUrl(version: String): String {
 
 
         ---
-        xnotes ${version.ifEmpty { "(unknown)" }}
+        zNotes ${version.ifEmpty { "(unknown)" }}
         ${Build.MANUFACTURER} ${Build.MODEL}
         Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})
     """.trimIndent()
@@ -246,7 +246,7 @@ private fun bugReportUrl(version: String): String {
 /** GitHub new-issue link with a lightweight feature template. */
 private fun featureRequestUrl(): String {
     val body = """
-        **What would you like xnotes to do?**
+        **What would you like zNotes to do?**
 
     """.trimIndent()
     return "$ISSUES_URL?title=${Uri.encode("[Feature] ")}&body=${Uri.encode(body)}"

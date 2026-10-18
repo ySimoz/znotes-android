@@ -1,0 +1,350 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1600" height="984" viewBox="0 0 1600 984"><rect width="1600" height="984" fill="#f7f7f4"/><text x="60" y="78" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="40" font-weight="700" fill="#161616">zNote — Identity &amp; Logo Concepts</text><text x="60" y="116" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="20" fill="#6b6b6b">Concepts for review — pick a direction (or tell me what you like in each).</text><rect x="60" y="150" width="474.667" height="774" rx="18" fill="#fff" stroke="#161616" stroke-width="2"/><g><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" x="90" y="190" width="414.667" height="300" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <pattern id="c0-pat_a" width="14.5" height="14.5" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <rect width="14.5" height="14.5" fill="#090A0D" />
+      <line x1="0" y1="0" x2="0" y2="14.5" stroke="#1B222E" stroke-width="3.5" />
+    </pattern>
+  </defs>
+  <rect width="256" height="256" fill="url(#c0-pat_a)" rx="44" />
+  <g id="c0-mark">
+    <!-- Orange Chromatic Glitch Offset -->
+    <path d="M 54,58 L 204,58 L 204,94 L 194,100 L 148,100 L 100,156 L 194,156 L 204,166 L 196,198 L 52,198 L 52,162 L 62,156 L 108,156 L 156,100 L 54,100 Z" fill="#FF944A" transform="translate(-16, 0)" />
+    
+    <!-- Primary Cyan Front Layer -->
+    <path d="M 54,58 L 204,58 L 204,94 L 194,100 L 148,100 L 100,156 L 194,156 L 204,166 L 196,198 L 52,198 L 52,162 L 62,156 L 108,156 L 156,100 L 54,100 Z" fill="#1DAEF5" />
+    
+    <!-- White Accent Foot -->
+    <path d="M 52,198 L 104,198 L 122,156 L 62,156 L 52,162 Z" fill="#FF944A" transform="translate(-16, 0)" opacity="0.6" />
+    <path d="M 52,198 L 104,198 L 122,156 L 62,156 L 52,162 Z" fill="#FFFFFF" />
+  </g>
+</svg></g><g><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 768 256" x="90" y="514" width="414.667" height="120" preserveAspectRatio="xMidYMid meet">
+  <rect width="768" height="256" fill="#0A0B0E" />
+  <!-- Embedded Symbol -->
+  <g transform="translate(32, 16) scale(0.875)">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <pattern id="l0-pat_a" width="14.5" height="14.5" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <rect width="14.5" height="14.5" fill="#090A0D" />
+      <line x1="0" y1="0" x2="0" y2="14.5" stroke="#1B222E" stroke-width="3.5" />
+    </pattern>
+  </defs>
+  <rect width="256" height="256" fill="url(#l0-pat_a)" rx="44" />
+  <g id="l0-mark">
+    <!-- Orange Chromatic Glitch Offset -->
+    <path d="M 54,58 L 204,58 L 204,94 L 194,100 L 148,100 L 100,156 L 194,156 L 204,166 L 196,198 L 52,198 L 52,162 L 62,156 L 108,156 L 156,100 L 54,100 Z" fill="#FF944A" transform="translate(-16, 0)" />
+    
+    <!-- Primary Cyan Front Layer -->
+    <path d="M 54,58 L 204,58 L 204,94 L 194,100 L 148,100 L 100,156 L 194,156 L 204,166 L 196,198 L 52,198 L 52,162 L 62,156 L 108,156 L 156,100 L 54,100 Z" fill="#1DAEF5" />
+    
+    <!-- White Accent Foot -->
+    <path d="M 52,198 L 104,198 L 122,156 L 62,156 L 52,162 Z" fill="#FF944A" transform="translate(-16, 0)" opacity="0.6" />
+    <path d="M 52,198 L 104,198 L 122,156 L 62,156 L 52,162 Z" fill="#FFFFFF" />
+  </g>
+</svg>
+  </g>
+  <!-- Wordmark 'zNote' -->
+  <g transform="translate(280, 160)" font-family="system-ui, -apple-system, sans-serif" font-weight="800">
+    <!-- 'z' in Cyan with Orange Glitch Shadow -->
+    <text x="0" y="0" font-size="108" fill="#FF944A" dx="-5" dy="0" letter-spacing="-1">z</text>
+    <text x="0" y="0" font-size="108" fill="#1DAEF5" letter-spacing="-1">z</text>
+    
+    <!-- 'Note' in crisp pure white -->
+    <text x="64" y="0" font-size="108" fill="#FFFFFF" letter-spacing="-1">Note</text>
+    
+    <!-- Subtitle -->
+    <text x="6" y="38" font-size="20" fill="#8892A4" font-weight="500" letter-spacing="4">HANDWRITING NOTEBOOK</text>
+  </g>
+</svg></g><g><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" x="90" y="660" width="64" height="64" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <pattern id="s064-pat_a" width="14.5" height="14.5" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <rect width="14.5" height="14.5" fill="#090A0D" />
+      <line x1="0" y1="0" x2="0" y2="14.5" stroke="#1B222E" stroke-width="3.5" />
+    </pattern>
+  </defs>
+  <rect width="256" height="256" fill="url(#s064-pat_a)" rx="44" />
+  <g id="s064-mark">
+    <!-- Orange Chromatic Glitch Offset -->
+    <path d="M 54,58 L 204,58 L 204,94 L 194,100 L 148,100 L 100,156 L 194,156 L 204,166 L 196,198 L 52,198 L 52,162 L 62,156 L 108,156 L 156,100 L 54,100 Z" fill="#FF944A" transform="translate(-16, 0)" />
+    
+    <!-- Primary Cyan Front Layer -->
+    <path d="M 54,58 L 204,58 L 204,94 L 194,100 L 148,100 L 100,156 L 194,156 L 204,166 L 196,198 L 52,198 L 52,162 L 62,156 L 108,156 L 156,100 L 54,100 Z" fill="#1DAEF5" />
+    
+    <!-- White Accent Foot -->
+    <path d="M 52,198 L 104,198 L 122,156 L 62,156 L 52,162 Z" fill="#FF944A" transform="translate(-16, 0)" opacity="0.6" />
+    <path d="M 52,198 L 104,198 L 122,156 L 62,156 L 52,162 Z" fill="#FFFFFF" />
+  </g>
+</svg></g><text x="122" y="744" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" fill="#8a8a8a" text-anchor="middle">64px</text><g><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" x="180" y="692" width="32" height="32" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <pattern id="s032-pat_a" width="14.5" height="14.5" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <rect width="14.5" height="14.5" fill="#090A0D" />
+      <line x1="0" y1="0" x2="0" y2="14.5" stroke="#1B222E" stroke-width="3.5" />
+    </pattern>
+  </defs>
+  <rect width="256" height="256" fill="url(#s032-pat_a)" rx="44" />
+  <g id="s032-mark">
+    <!-- Orange Chromatic Glitch Offset -->
+    <path d="M 54,58 L 204,58 L 204,94 L 194,100 L 148,100 L 100,156 L 194,156 L 204,166 L 196,198 L 52,198 L 52,162 L 62,156 L 108,156 L 156,100 L 54,100 Z" fill="#FF944A" transform="translate(-16, 0)" />
+    
+    <!-- Primary Cyan Front Layer -->
+    <path d="M 54,58 L 204,58 L 204,94 L 194,100 L 148,100 L 100,156 L 194,156 L 204,166 L 196,198 L 52,198 L 52,162 L 62,156 L 108,156 L 156,100 L 54,100 Z" fill="#1DAEF5" />
+    
+    <!-- White Accent Foot -->
+    <path d="M 52,198 L 104,198 L 122,156 L 62,156 L 52,162 Z" fill="#FF944A" transform="translate(-16, 0)" opacity="0.6" />
+    <path d="M 52,198 L 104,198 L 122,156 L 62,156 L 52,162 Z" fill="#FFFFFF" />
+  </g>
+</svg></g><text x="196" y="744" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" fill="#8a8a8a" text-anchor="middle">32px</text><g><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" x="238" y="708" width="16" height="16" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <pattern id="s016-pat_a" width="14.5" height="14.5" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <rect width="14.5" height="14.5" fill="#090A0D" />
+      <line x1="0" y1="0" x2="0" y2="14.5" stroke="#1B222E" stroke-width="3.5" />
+    </pattern>
+  </defs>
+  <rect width="256" height="256" fill="url(#s016-pat_a)" rx="44" />
+  <g id="s016-mark">
+    <!-- Orange Chromatic Glitch Offset -->
+    <path d="M 54,58 L 204,58 L 204,94 L 194,100 L 148,100 L 100,156 L 194,156 L 204,166 L 196,198 L 52,198 L 52,162 L 62,156 L 108,156 L 156,100 L 54,100 Z" fill="#FF944A" transform="translate(-16, 0)" />
+    
+    <!-- Primary Cyan Front Layer -->
+    <path d="M 54,58 L 204,58 L 204,94 L 194,100 L 148,100 L 100,156 L 194,156 L 204,166 L 196,198 L 52,198 L 52,162 L 62,156 L 108,156 L 156,100 L 54,100 Z" fill="#1DAEF5" />
+    
+    <!-- White Accent Foot -->
+    <path d="M 52,198 L 104,198 L 122,156 L 62,156 L 52,162 Z" fill="#FF944A" transform="translate(-16, 0)" opacity="0.6" />
+    <path d="M 52,198 L 104,198 L 122,156 L 62,156 L 52,162 Z" fill="#FFFFFF" />
+  </g>
+</svg></g><text x="246" y="744" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" fill="#8a8a8a" text-anchor="middle">16px</text><text x="90.0" y="780" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="26" font-weight="700" fill="#161616">A · Cyber Glitch Z</text><text x="90.0" y="808" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="15" font-weight="700" fill="#161616" letter-spacing="1.5">RECOMMENDED</text><text x="90.0" y="842" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="19" fill="#555">Direct evolution of original X-notes glitch</text><text x="90.0" y="868" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="19" fill="#555">with 45° diagonal paper stripes.</text><rect x="562.667" y="150" width="474.667" height="774" rx="18" fill="#fff" stroke="#e4e4e0" stroke-width="1"/><g><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" x="592.667" y="190" width="414.667" height="300" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <pattern id="c1-pat_b" width="16" height="16" patternTransform="rotate(-45)" patternUnits="userSpaceOnUse">
+      <rect width="16" height="16" fill="#08090C" />
+      <line x1="0" y1="0" x2="0" y2="16" stroke="#181E29" stroke-width="4" />
+    </pattern>
+  </defs>
+  <rect width="256" height="256" fill="url(#c1-pat_b)" rx="44" />
+  <g id="c1-mark">
+    <!-- Orange Offset (-18, -4) -->
+    <path d="M 74,58 L 208,58 L 194,100 L 146,100 L 96,154 L 186,154 L 174,198 L 46,198 L 60,154 L 110,154 L 160,100 L 88,100 Z" fill="#FF944A" transform="translate(-18, -4)" />
+    
+    <!-- Cyan Layer -->
+    <path d="M 74,58 L 208,58 L 194,100 L 146,100 L 96,154 L 186,154 L 174,198 L 46,198 L 60,154 L 110,154 L 160,100 L 88,100 Z" fill="#1DAEF5" />
+    
+    <!-- White Terminal -->
+    <path d="M 46,198 L 98,198 L 116,154 L 60,154 Z" fill="#FF944A" transform="translate(-18, -4)" opacity="0.5" />
+    <path d="M 46,198 L 98,198 L 116,154 L 60,154 Z" fill="#FFFFFF" />
+  </g>
+</svg></g><g><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 768 256" x="592.667" y="514" width="414.667" height="120" preserveAspectRatio="xMidYMid meet">
+  <rect width="768" height="256" fill="#0A0B0E" />
+  <!-- Embedded Symbol -->
+  <g transform="translate(32, 16) scale(0.875)">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <pattern id="l1-pat_b" width="16" height="16" patternTransform="rotate(-45)" patternUnits="userSpaceOnUse">
+      <rect width="16" height="16" fill="#08090C" />
+      <line x1="0" y1="0" x2="0" y2="16" stroke="#181E29" stroke-width="4" />
+    </pattern>
+  </defs>
+  <rect width="256" height="256" fill="url(#l1-pat_b)" rx="44" />
+  <g id="l1-mark">
+    <!-- Orange Offset (-18, -4) -->
+    <path d="M 74,58 L 208,58 L 194,100 L 146,100 L 96,154 L 186,154 L 174,198 L 46,198 L 60,154 L 110,154 L 160,100 L 88,100 Z" fill="#FF944A" transform="translate(-18, -4)" />
+    
+    <!-- Cyan Layer -->
+    <path d="M 74,58 L 208,58 L 194,100 L 146,100 L 96,154 L 186,154 L 174,198 L 46,198 L 60,154 L 110,154 L 160,100 L 88,100 Z" fill="#1DAEF5" />
+    
+    <!-- White Terminal -->
+    <path d="M 46,198 L 98,198 L 116,154 L 60,154 Z" fill="#FF944A" transform="translate(-18, -4)" opacity="0.5" />
+    <path d="M 46,198 L 98,198 L 116,154 L 60,154 Z" fill="#FFFFFF" />
+  </g>
+</svg>
+  </g>
+  <!-- Wordmark 'zNote' -->
+  <g transform="translate(280, 160)" font-family="system-ui, -apple-system, sans-serif" font-weight="800">
+    <!-- 'z' in Cyan with Orange Glitch Shadow -->
+    <text x="0" y="0" font-size="108" fill="#FF944A" dx="-5" dy="0" letter-spacing="-1">z</text>
+    <text x="0" y="0" font-size="108" fill="#1DAEF5" letter-spacing="-1">z</text>
+    
+    <!-- 'Note' in crisp pure white -->
+    <text x="64" y="0" font-size="108" fill="#FFFFFF" letter-spacing="-1">Note</text>
+    
+    <!-- Subtitle -->
+    <text x="6" y="38" font-size="20" fill="#8892A4" font-weight="500" letter-spacing="4">HANDWRITING NOTEBOOK</text>
+  </g>
+</svg></g><g><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" x="592.667" y="660" width="64" height="64" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <pattern id="s164-pat_b" width="16" height="16" patternTransform="rotate(-45)" patternUnits="userSpaceOnUse">
+      <rect width="16" height="16" fill="#08090C" />
+      <line x1="0" y1="0" x2="0" y2="16" stroke="#181E29" stroke-width="4" />
+    </pattern>
+  </defs>
+  <rect width="256" height="256" fill="url(#s164-pat_b)" rx="44" />
+  <g id="s164-mark">
+    <!-- Orange Offset (-18, -4) -->
+    <path d="M 74,58 L 208,58 L 194,100 L 146,100 L 96,154 L 186,154 L 174,198 L 46,198 L 60,154 L 110,154 L 160,100 L 88,100 Z" fill="#FF944A" transform="translate(-18, -4)" />
+    
+    <!-- Cyan Layer -->
+    <path d="M 74,58 L 208,58 L 194,100 L 146,100 L 96,154 L 186,154 L 174,198 L 46,198 L 60,154 L 110,154 L 160,100 L 88,100 Z" fill="#1DAEF5" />
+    
+    <!-- White Terminal -->
+    <path d="M 46,198 L 98,198 L 116,154 L 60,154 Z" fill="#FF944A" transform="translate(-18, -4)" opacity="0.5" />
+    <path d="M 46,198 L 98,198 L 116,154 L 60,154 Z" fill="#FFFFFF" />
+  </g>
+</svg></g><text x="624.667" y="744" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" fill="#8a8a8a" text-anchor="middle">64px</text><g><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" x="682.667" y="692" width="32" height="32" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <pattern id="s132-pat_b" width="16" height="16" patternTransform="rotate(-45)" patternUnits="userSpaceOnUse">
+      <rect width="16" height="16" fill="#08090C" />
+      <line x1="0" y1="0" x2="0" y2="16" stroke="#181E29" stroke-width="4" />
+    </pattern>
+  </defs>
+  <rect width="256" height="256" fill="url(#s132-pat_b)" rx="44" />
+  <g id="s132-mark">
+    <!-- Orange Offset (-18, -4) -->
+    <path d="M 74,58 L 208,58 L 194,100 L 146,100 L 96,154 L 186,154 L 174,198 L 46,198 L 60,154 L 110,154 L 160,100 L 88,100 Z" fill="#FF944A" transform="translate(-18, -4)" />
+    
+    <!-- Cyan Layer -->
+    <path d="M 74,58 L 208,58 L 194,100 L 146,100 L 96,154 L 186,154 L 174,198 L 46,198 L 60,154 L 110,154 L 160,100 L 88,100 Z" fill="#1DAEF5" />
+    
+    <!-- White Terminal -->
+    <path d="M 46,198 L 98,198 L 116,154 L 60,154 Z" fill="#FF944A" transform="translate(-18, -4)" opacity="0.5" />
+    <path d="M 46,198 L 98,198 L 116,154 L 60,154 Z" fill="#FFFFFF" />
+  </g>
+</svg></g><text x="698.667" y="744" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" fill="#8a8a8a" text-anchor="middle">32px</text><g><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" x="740.667" y="708" width="16" height="16" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <pattern id="s116-pat_b" width="16" height="16" patternTransform="rotate(-45)" patternUnits="userSpaceOnUse">
+      <rect width="16" height="16" fill="#08090C" />
+      <line x1="0" y1="0" x2="0" y2="16" stroke="#181E29" stroke-width="4" />
+    </pattern>
+  </defs>
+  <rect width="256" height="256" fill="url(#s116-pat_b)" rx="44" />
+  <g id="s116-mark">
+    <!-- Orange Offset (-18, -4) -->
+    <path d="M 74,58 L 208,58 L 194,100 L 146,100 L 96,154 L 186,154 L 174,198 L 46,198 L 60,154 L 110,154 L 160,100 L 88,100 Z" fill="#FF944A" transform="translate(-18, -4)" />
+    
+    <!-- Cyan Layer -->
+    <path d="M 74,58 L 208,58 L 194,100 L 146,100 L 96,154 L 186,154 L 174,198 L 46,198 L 60,154 L 110,154 L 160,100 L 88,100 Z" fill="#1DAEF5" />
+    
+    <!-- White Terminal -->
+    <path d="M 46,198 L 98,198 L 116,154 L 60,154 Z" fill="#FF944A" transform="translate(-18, -4)" opacity="0.5" />
+    <path d="M 46,198 L 98,198 L 116,154 L 60,154 Z" fill="#FFFFFF" />
+  </g>
+</svg></g><text x="748.667" y="744" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" fill="#8a8a8a" text-anchor="middle">16px</text><text x="592.6666666666667" y="780" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="26" font-weight="700" fill="#161616">B · Velocity Chisel Z</text><text x="592.6666666666667" y="814" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="19" fill="#555">Italic 14° dynamic chisel pen nib conveying</text><text x="592.6666666666667" y="840" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="19" fill="#555">handwriting speed.</text><rect x="1065.33" y="150" width="474.667" height="774" rx="18" fill="#fff" stroke="#e4e4e0" stroke-width="1"/><g><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" x="1095.33" y="190" width="414.667" height="300" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <pattern id="c2-pat_c" width="14.0" height="14.0" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <rect width="14.0" height="14.0" fill="#090B0E" />
+      <line x1="0" y1="0" x2="0" y2="14.0" stroke="#1B222E" stroke-width="3.5" />
+    </pattern>
+  </defs>
+  <rect width="256" height="256" fill="url(#c2-pat_c)" rx="44" />
+  <g id="c2-mark">
+    <!-- Orange Layer -->
+    <path d="M 54,58 L 204,58 L 204,96 L 148,96 L 100,154 L 198,154 L 198,198 L 52,198 L 52,160 L 106,160 L 154,96 L 54,96 Z" fill="#FF944A" transform="translate(-16, 0)" />
+    <rect x="44" y="120" width="166" height="16" fill="#FF944A" transform="translate(-12, 0)" opacity="0.9" />
+    
+    <!-- Cyan Layer -->
+    <path d="M 54,58 L 204,58 L 204,96 L 148,96 L 100,154 L 198,154 L 198,198 L 52,198 L 52,160 L 106,160 L 154,96 L 54,96 Z" fill="#1DAEF5" />
+    <rect x="56" y="120" width="166" height="16" fill="#1DAEF5" />
+    
+    <!-- White Foot -->
+    <path d="M 52,198 L 102,198 L 120,160 L 66,160 L 52,168 Z" fill="#FF944A" transform="translate(-16, 0)" opacity="0.6" />
+    <path d="M 52,198 L 102,198 L 120,160 L 66,160 L 52,168 Z" fill="#FFFFFF" />
+  </g>
+</svg></g><g><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 768 256" x="1095.33" y="514" width="414.667" height="120" preserveAspectRatio="xMidYMid meet">
+  <rect width="768" height="256" fill="#0A0B0E" />
+  <!-- Embedded Symbol -->
+  <g transform="translate(32, 16) scale(0.875)">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <pattern id="l2-pat_c" width="14.0" height="14.0" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <rect width="14.0" height="14.0" fill="#090B0E" />
+      <line x1="0" y1="0" x2="0" y2="14.0" stroke="#1B222E" stroke-width="3.5" />
+    </pattern>
+  </defs>
+  <rect width="256" height="256" fill="url(#l2-pat_c)" rx="44" />
+  <g id="l2-mark">
+    <!-- Orange Layer -->
+    <path d="M 54,58 L 204,58 L 204,96 L 148,96 L 100,154 L 198,154 L 198,198 L 52,198 L 52,160 L 106,160 L 154,96 L 54,96 Z" fill="#FF944A" transform="translate(-16, 0)" />
+    <rect x="44" y="120" width="166" height="16" fill="#FF944A" transform="translate(-12, 0)" opacity="0.9" />
+    
+    <!-- Cyan Layer -->
+    <path d="M 54,58 L 204,58 L 204,96 L 148,96 L 100,154 L 198,154 L 198,198 L 52,198 L 52,160 L 106,160 L 154,96 L 54,96 Z" fill="#1DAEF5" />
+    <rect x="56" y="120" width="166" height="16" fill="#1DAEF5" />
+    
+    <!-- White Foot -->
+    <path d="M 52,198 L 102,198 L 120,160 L 66,160 L 52,168 Z" fill="#FF944A" transform="translate(-16, 0)" opacity="0.6" />
+    <path d="M 52,198 L 102,198 L 120,160 L 66,160 L 52,168 Z" fill="#FFFFFF" />
+  </g>
+</svg>
+  </g>
+  <!-- Wordmark 'zNote' -->
+  <g transform="translate(280, 160)" font-family="system-ui, -apple-system, sans-serif" font-weight="800">
+    <!-- 'z' in Cyan with Orange Glitch Shadow -->
+    <text x="0" y="0" font-size="108" fill="#FF944A" dx="-5" dy="0" letter-spacing="-1">z</text>
+    <text x="0" y="0" font-size="108" fill="#1DAEF5" letter-spacing="-1">z</text>
+    
+    <!-- 'Note' in crisp pure white -->
+    <text x="64" y="0" font-size="108" fill="#FFFFFF" letter-spacing="-1">Note</text>
+    
+    <!-- Subtitle -->
+    <text x="6" y="38" font-size="20" fill="#8892A4" font-weight="500" letter-spacing="4">HANDWRITING NOTEBOOK</text>
+  </g>
+</svg></g><g><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" x="1095.33" y="660" width="64" height="64" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <pattern id="s264-pat_c" width="14.0" height="14.0" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <rect width="14.0" height="14.0" fill="#090B0E" />
+      <line x1="0" y1="0" x2="0" y2="14.0" stroke="#1B222E" stroke-width="3.5" />
+    </pattern>
+  </defs>
+  <rect width="256" height="256" fill="url(#s264-pat_c)" rx="44" />
+  <g id="s264-mark">
+    <!-- Orange Layer -->
+    <path d="M 54,58 L 204,58 L 204,96 L 148,96 L 100,154 L 198,154 L 198,198 L 52,198 L 52,160 L 106,160 L 154,96 L 54,96 Z" fill="#FF944A" transform="translate(-16, 0)" />
+    <rect x="44" y="120" width="166" height="16" fill="#FF944A" transform="translate(-12, 0)" opacity="0.9" />
+    
+    <!-- Cyan Layer -->
+    <path d="M 54,58 L 204,58 L 204,96 L 148,96 L 100,154 L 198,154 L 198,198 L 52,198 L 52,160 L 106,160 L 154,96 L 54,96 Z" fill="#1DAEF5" />
+    <rect x="56" y="120" width="166" height="16" fill="#1DAEF5" />
+    
+    <!-- White Foot -->
+    <path d="M 52,198 L 102,198 L 120,160 L 66,160 L 52,168 Z" fill="#FF944A" transform="translate(-16, 0)" opacity="0.6" />
+    <path d="M 52,198 L 102,198 L 120,160 L 66,160 L 52,168 Z" fill="#FFFFFF" />
+  </g>
+</svg></g><text x="1127.33" y="744" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" fill="#8a8a8a" text-anchor="middle">64px</text><g><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" x="1185.33" y="692" width="32" height="32" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <pattern id="s232-pat_c" width="14.0" height="14.0" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <rect width="14.0" height="14.0" fill="#090B0E" />
+      <line x1="0" y1="0" x2="0" y2="14.0" stroke="#1B222E" stroke-width="3.5" />
+    </pattern>
+  </defs>
+  <rect width="256" height="256" fill="url(#s232-pat_c)" rx="44" />
+  <g id="s232-mark">
+    <!-- Orange Layer -->
+    <path d="M 54,58 L 204,58 L 204,96 L 148,96 L 100,154 L 198,154 L 198,198 L 52,198 L 52,160 L 106,160 L 154,96 L 54,96 Z" fill="#FF944A" transform="translate(-16, 0)" />
+    <rect x="44" y="120" width="166" height="16" fill="#FF944A" transform="translate(-12, 0)" opacity="0.9" />
+    
+    <!-- Cyan Layer -->
+    <path d="M 54,58 L 204,58 L 204,96 L 148,96 L 100,154 L 198,154 L 198,198 L 52,198 L 52,160 L 106,160 L 154,96 L 54,96 Z" fill="#1DAEF5" />
+    <rect x="56" y="120" width="166" height="16" fill="#1DAEF5" />
+    
+    <!-- White Foot -->
+    <path d="M 52,198 L 102,198 L 120,160 L 66,160 L 52,168 Z" fill="#FF944A" transform="translate(-16, 0)" opacity="0.6" />
+    <path d="M 52,198 L 102,198 L 120,160 L 66,160 L 52,168 Z" fill="#FFFFFF" />
+  </g>
+</svg></g><text x="1201.33" y="744" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" fill="#8a8a8a" text-anchor="middle">32px</text><g><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" x="1243.33" y="708" width="16" height="16" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <pattern id="s216-pat_c" width="14.0" height="14.0" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <rect width="14.0" height="14.0" fill="#090B0E" />
+      <line x1="0" y1="0" x2="0" y2="14.0" stroke="#1B222E" stroke-width="3.5" />
+    </pattern>
+  </defs>
+  <rect width="256" height="256" fill="url(#s216-pat_c)" rx="44" />
+  <g id="s216-mark">
+    <!-- Orange Layer -->
+    <path d="M 54,58 L 204,58 L 204,96 L 148,96 L 100,154 L 198,154 L 198,198 L 52,198 L 52,160 L 106,160 L 154,96 L 54,96 Z" fill="#FF944A" transform="translate(-16, 0)" />
+    <rect x="44" y="120" width="166" height="16" fill="#FF944A" transform="translate(-12, 0)" opacity="0.9" />
+    
+    <!-- Cyan Layer -->
+    <path d="M 54,58 L 204,58 L 204,96 L 148,96 L 100,154 L 198,154 L 198,198 L 52,198 L 52,160 L 106,160 L 154,96 L 54,96 Z" fill="#1DAEF5" />
+    <rect x="56" y="120" width="166" height="16" fill="#1DAEF5" />
+    
+    <!-- White Foot -->
+    <path d="M 52,198 L 102,198 L 120,160 L 66,160 L 52,168 Z" fill="#FF944A" transform="translate(-16, 0)" opacity="0.6" />
+    <path d="M 52,198 L 102,198 L 120,160 L 66,160 L 52,168 Z" fill="#FFFFFF" />
+  </g>
+</svg></g><text x="1251.33" y="744" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" fill="#8a8a8a" text-anchor="middle">16px</text><text x="1095.3333333333335" y="780" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="26" font-weight="700" fill="#161616">C · CRT Fracture Z</text><text x="1095.3333333333335" y="814" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="19" fill="#555">CRT scan-line glitch displacement mirroring</text><text x="1095.3333333333335" y="840" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="19" fill="#555">the 24-frame app loader.</text></svg>

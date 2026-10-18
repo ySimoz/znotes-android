@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 768 256" width="768" height="256">
+  <rect width="768" height="256" fill="#0A0B0E" />
+  <g transform="translate(32, 16) scale(0.875)">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <pattern id="diag_stripes" width="16" height="16" patternTransform="rotate(-45)" patternUnits="userSpaceOnUse">
+      <rect width="16" height="16" fill="#08090C" />
+      <line x1="0" y1="0" x2="0" y2="16" stroke="#181E29" stroke-width="4" />
+    </pattern>
+  </defs>
+  <rect width="256" height="256" fill="url(#diag_stripes)" rx="36" />
+  <g id="mark">
+    <!-- Orange chromatic glitch offset (-16, -3) -->
+    <path d="M 74.0,60.0 L 206.0,60.0 L 194.0,96.0 L 186.0,96.0 L 122.0,160.0 L 188.0,160.0 L 176.0,196.0 L 48.0,196.0 L 60.0,160.0 L 71.1,160.0 L 135.1,96.0 L 62.0,96.0 Z" fill="#FF944A" transform="translate(-16, -3)" />
+    
+    <!-- Primary Cyan front layer -->
+    <path d="M 74.0,60.0 L 206.0,60.0 L 194.0,96.0 L 186.0,96.0 L 122.0,160.0 L 188.0,160.0 L 176.0,196.0 L 48.0,196.0 L 60.0,160.0 L 71.1,160.0 L 135.1,96.0 L 62.0,96.0 Z" fill="#1DAEF5" />
+    
+    <!-- White accent terminal wedge -->
+    <path d="M 48.0,196.0 L 100.0,196.0 L 112.0,160.0 L 60.0,160.0 Z" fill="#FF944A" transform="translate(-16, -3)" opacity="0.5" />
+    <path d="M 48.0,196.0 L 100.0,196.0 L 112.0,160.0 L 60.0,160.0 Z" fill="#FFFFFF" />
+  </g>
+</svg>
+  </g>
+  <g transform="translate(280, 156)" font-family="system-ui, -apple-system, sans-serif" font-weight="800">
+    <text x="0" y="0" font-size="108" fill="#FF944A" dx="-5" dy="0" letter-spacing="-1">z</text>
+    <text x="0" y="0" font-size="108" fill="#1DAEF5" letter-spacing="-1">z</text>
+    <text x="64" y="0" font-size="108" fill="#FFFFFF" letter-spacing="-1">Notes</text>
+    <text x="6" y="38" font-size="20" fill="#8892A4" font-weight="500" letter-spacing="4">HANDWRITING NOTEBOOK</text>
+  </g>
+</svg>

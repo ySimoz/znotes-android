@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 432 432" width="432" height="432">
+  <defs>
+    <pattern id="adaptive_diag" width="20" height="20" patternTransform="rotate(-45)" patternUnits="userSpaceOnUse">
+      <rect width="20" height="20" fill="#08090C" />
+      <line x1="0" y1="0" x2="0" y2="20" stroke="#181E29" stroke-width="5" />
+    </pattern>
+  </defs>
+  <!-- Full adaptive background surface with diagonal stripes -->
+  <rect width="432" height="432" fill="url(#adaptive_diag)" />
+  
+  <g transform="translate(68.8, 68.8) scale(1.15)">
+    <!-- Orange offset -->
+    <path d="M 74.0,60.0 L 206.0,60.0 L 194.0,96.0 L 186.0,96.0 L 122.0,160.0 L 188.0,160.0 L 176.0,196.0 L 48.0,196.0 L 60.0,160.0 L 71.1,160.0 L 135.1,96.0 L 62.0,96.0 Z" fill="#FF944A" transform="translate(-16, -3)" />
+    <!-- Cyan main -->
+    <path d="M 74.0,60.0 L 206.0,60.0 L 194.0,96.0 L 186.0,96.0 L 122.0,160.0 L 188.0,160.0 L 176.0,196.0 L 48.0,196.0 L 60.0,160.0 L 71.1,160.0 L 135.1,96.0 L 62.0,96.0 Z" fill="#1DAEF5" />
+    <!-- White foot -->
+    <path d="M 48.0,196.0 L 100.0,196.0 L 112.0,160.0 L 60.0,160.0 Z" fill="#FF944A" transform="translate(-16, -3)" opacity="0.5" />
+    <path d="M 48.0,196.0 L 100.0,196.0 L 112.0,160.0 L 60.0,160.0 Z" fill="#FFFFFF" />
+  </g>
+</svg>

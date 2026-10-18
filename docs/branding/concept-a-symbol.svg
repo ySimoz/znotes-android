@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <pattern id="pat_a" width="14.5" height="14.5" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <rect width="14.5" height="14.5" fill="#090A0D" />
+      <line x1="0" y1="0" x2="0" y2="14.5" stroke="#1B222E" stroke-width="3.5" />
+    </pattern>
+  </defs>
+  <rect width="256" height="256" fill="url(#pat_a)" rx="44" />
+  <g id="mark">
+    <!-- Orange Chromatic Glitch Offset -->
+    <path d="M 54,58 L 204,58 L 204,94 L 194,100 L 148,100 L 100,156 L 194,156 L 204,166 L 196,198 L 52,198 L 52,162 L 62,156 L 108,156 L 156,100 L 54,100 Z" fill="#FF944A" transform="translate(-16, 0)" />
+    
+    <!-- Primary Cyan Front Layer -->
+    <path d="M 54,58 L 204,58 L 204,94 L 194,100 L 148,100 L 100,156 L 194,156 L 204,166 L 196,198 L 52,198 L 52,162 L 62,156 L 108,156 L 156,100 L 54,100 Z" fill="#1DAEF5" />
+    
+    <!-- White Accent Foot -->
+    <path d="M 52,198 L 104,198 L 122,156 L 62,156 L 52,162 Z" fill="#FF944A" transform="translate(-16, 0)" opacity="0.6" />
+    <path d="M 52,198 L 104,198 L 122,156 L 62,156 L 52,162 Z" fill="#FFFFFF" />
+  </g>
+</svg>

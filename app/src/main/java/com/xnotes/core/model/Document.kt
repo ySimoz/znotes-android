@@ -6,6 +6,15 @@ import com.xnotes.core.util.Paths
 /** A user bookmark into a document (spec 02 §3). */
 data class Bookmark(var page: Int, var label: String)
 
+/** An item in the hierarchical table of contents (uncapped nesting tree). */
+data class OutlineItem(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    var page: Int,
+    var title: String,
+    var level: Int = 0,
+    var expanded: Boolean = true,
+)
+
 /**
  * An ordered collection of pages plus on-disk identity (spec 02 §3). New notes
  * open with one blank page at the user's default page size/orientation.
@@ -25,6 +34,7 @@ class Document(
      */
     var pdfFile: java.io.File? = null,
     val bookmarks: MutableList<Bookmark> = mutableListOf(),
+    val outline: MutableList<OutlineItem> = mutableListOf(),
     /** Document-wide ("all pages") style override; per-page [Page.style] layers on top. */
     var style: PageStyle = PageStyle(),
     /** Document-wide ("all pages") margin override; per-page [Page.margins] layers on top. */
@@ -82,9 +92,53 @@ class Document(
         for (bookmark in bookmarks) {
             bookmark.page = reorderedIndex(bookmark.page, fromIndex, toIndex)
         }
+        for (item in outline) {
+            item.page = reorderedIndex(item.page, fromIndex, toIndex)
+        }
 
         dirty = true
         return true
+    }
+
+    /** Ensure outline nesting levels never jump by more than 1 relative to their predecessor. */
+    fun normalizeOutlineLevels() {
+        var prevLevel = -1
+        for (item in outline) {
+            if (item.level > prevLevel + 1) {
+                item.level = (prevLevel + 1).coerceAtLeast(0)
+            }
+            if (item.level < 0) item.level = 0
+            prevLevel = item.level
+        }
+    }
+
+    /** Synchronizes bookmarks and outline entries when a page is inserted at [at]. */
+    fun onPageInserted(at: Int) {
+        for (bm in bookmarks) {
+            if (bm.page >= at) bm.page++
+        }
+        for (item in outline) {
+            if (item.page >= at) item.page++
+        }
+        dirty = true
+    }
+
+    /** Synchronizes bookmarks and outline entries when a page at [at] is deleted, promoting children. */
+    fun onPageDeleted(at: Int) {
+        val bIt = bookmarks.iterator()
+        while (bIt.hasNext()) {
+            val bm = bIt.next()
+            if (bm.page == at) bIt.remove()
+            else if (bm.page > at) bm.page--
+        }
+        val oIt = outline.iterator()
+        while (oIt.hasNext()) {
+            val item = oIt.next()
+            if (item.page == at) oIt.remove()
+            else if (item.page > at) item.page--
+        }
+        normalizeOutlineLevels()
+        dirty = true
     }
 
     companion object {

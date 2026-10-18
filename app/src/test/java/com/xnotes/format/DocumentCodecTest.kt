@@ -8,6 +8,7 @@ import com.xnotes.core.geometry.Flip
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.model.Bookmark
+import com.xnotes.core.model.OutlineItem
 import com.xnotes.core.model.ConnectorEnd
 import com.xnotes.core.model.ConnectorItem
 import com.xnotes.core.model.Document
@@ -239,6 +240,34 @@ class DocumentCodecTest {
 
         assertEquals(1, back.bookmarks.size)
         assertEquals("Intro", back.bookmarks[0].label)
+    }
+
+    @Test fun roundTripPreservesHierarchicalOutline() {
+        val doc = Document.blank(count = 3)
+        doc.outline.add(OutlineItem(id = "item-1", page = 0, title = "Chapter 1", level = 0, expanded = true))
+        doc.outline.add(OutlineItem(id = "item-2", page = 1, title = "Section 1.1", level = 1, expanded = false))
+        doc.outline.add(OutlineItem(id = "item-3", page = 2, title = "Deep Sub 1.1.1.1", level = 4, expanded = true))
+
+        val back = roundTrip(doc)
+
+        assertEquals(3, back.outline.size)
+        assertEquals("item-1", back.outline[0].id)
+        assertEquals("Chapter 1", back.outline[0].title)
+        assertEquals(0, back.outline[0].page)
+        assertEquals(0, back.outline[0].level)
+        assertTrue(back.outline[0].expanded)
+
+        assertEquals("item-2", back.outline[1].id)
+        assertEquals("Section 1.1", back.outline[1].title)
+        assertEquals(1, back.outline[1].page)
+        assertEquals(1, back.outline[1].level)
+        assertFalse(back.outline[1].expanded)
+
+        assertEquals("item-3", back.outline[2].id)
+        assertEquals("Deep Sub 1.1.1.1", back.outline[2].title)
+        assertEquals(2, back.outline[2].page)
+        assertEquals(4, back.outline[2].level)
+        assertTrue(back.outline[2].expanded)
     }
 
     @Test fun manifestIsStoredAndDeflatedCorrectly() {

@@ -68,6 +68,7 @@ fun Document.deepCopy(measurer: TextMeasurer): Document = Document(
     dirty = dirty,
     pdfFile = pdfFile,
     bookmarks = bookmarks.mapTo(mutableListOf()) { Bookmark(it.page, it.label) },
+    outline = outline.mapTo(mutableListOf()) { OutlineItem(it.id, it.page, it.title, it.level, it.expanded) },
     style = style,
     margins = margins,
     // The flow must be cloned too or the autosave snapshot would race live edits.
@@ -88,7 +89,7 @@ fun Document.deepCopy(measurer: TextMeasurer): Document = Document(
  * file; that edit marks the document dirty again and the next autosave carries it.
  *
  * The flow is the exception: it is a tree of mutable lists with no such discipline, so it is still
- * deep-copied. It is small. Use [deepCopy] wherever the copy has to be independently editable.
+ * deep-copied. Use [deepCopy] wherever the copy has to be independently editable.
  */
 fun Document.snapshot(): Document = Document(
     pages = pages.mapTo(mutableListOf()) {
@@ -100,6 +101,7 @@ fun Document.snapshot(): Document = Document(
     dirty = dirty,
     pdfFile = pdfFile,
     bookmarks = bookmarks.mapTo(mutableListOf()) { Bookmark(it.page, it.label) },
+    outline = outline.mapTo(mutableListOf()) { OutlineItem(it.id, it.page, it.title, it.level, it.expanded) },
     style = style,
     margins = margins,
     flow = flow.deepCopy(),

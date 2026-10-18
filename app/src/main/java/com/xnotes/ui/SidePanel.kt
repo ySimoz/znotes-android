@@ -40,6 +40,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -612,6 +613,7 @@ private fun PageContextMenu(
             }
             else -> {
                 DropdownMenuItem(text = { Text(stringResource(R.string.add_page)) }, leadingIcon = menuIcon(XnotesIcons.plus), onClick = { editor.insertPageAfter(index); onDismiss() })
+                DropdownMenuItem(text = { Text(stringResource(R.string.add_to_contents)) }, leadingIcon = menuIcon(XnotesIcons.contents), onClick = { editor.addOutlineItem(index, "Page ${index + 1}"); editor.sidePanelTab = SidePanelTab.CONTENTS; onDismiss() })
                 DropdownMenuItem(text = { Text(stringResource(R.string.insert_pdf)) }, leadingIcon = menuIcon(XnotesIcons.importDoc), onClick = { onInsertPdf(index); onDismiss() })
                 DropdownMenuItem(text = { Text(stringResource(R.string.copy)) }, leadingIcon = menuIcon(XnotesIcons.copy), onClick = { editor.copyPages(one); onDismiss() })
                 DropdownMenuItem(text = { Text(stringResource(R.string.cut)) }, leadingIcon = menuIcon(XnotesIcons.cut), onClick = { editor.cutPages(one); onDismiss() })
@@ -776,41 +778,276 @@ private fun VerticalScrollbar(listState: LazyListState, modifier: Modifier = Mod
     )
 }
 
+private fun visibleOutlineItems(outline: List<com.xnotes.core.model.OutlineItem>): List<Pair<Int, com.xnotes.core.model.OutlineItem>> {
+    val visible = mutableListOf<Pair<Int, com.xnotes.core.model.OutlineItem>>()
+    var hiddenBelowLevel: Int? = null
+    for ((index, item) in outline.withIndex()) {
+        if (hiddenBelowLevel != null) {
+            if (item.level > hiddenBelowLevel) {
+                continue
+            } else {
+                hiddenBelowLevel = null
+            }
+        }
+        visible.add(index to item)
+        if (!item.expanded) {
+            hiddenBelowLevel = item.level
+        }
+    }
+    return visible
+}
+
 @Composable
 private fun ContentsTab(editor: Editor) {
     val palette = LocalPalette.current
-    // tocVersion bumps when the off-thread outline parse lands (and to empty on document swap).
-    val version = editor.tocVersion
-    val entries = remember(version) { editor.tableOfContents }
-    if (entries.isEmpty()) {
-        EmptyHint(stringResource(R.string.no_contents))
-        return
-    }
-    LazyColumn(Modifier.fillMaxSize()) {
-        itemsIndexed(entries) { _, e ->
-            val hasTarget = e.destPage >= 0
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .then(if (hasTarget) Modifier.clickable { editor.goToTocEntry(e) } else Modifier)
-                    .padding(
-                        start = (10 + e.level.coerceAtMost(6) * 12).dp,
-                        end = 10.dp,
-                        top = 6.dp,
-                        bottom = 6.dp,
-                    ),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    e.title,
-                    color = (if (hasTarget) palette.text else palette.textDim).toComposeColor(),
-                    fontSize = 12.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
+    val outlineVersion = editor.outlineVersion
+    val outline = remember(outlineVersion) { editor.outline }
+    val tocVersion = editor.tocVersion
+    val pdfToc = remember(tocVersion) { editor.tableOfContents }
+
+    var showAddDialog by remember { mutableStateOf(false) }
+    var itemToRename by remember { mutableStateOf<Pair<Int, com.xnotes.core.model.OutlineItem>?>(null) }
+
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                stringResource(R.string.contents),
+                color = palette.textDim.toComposeColor(),
+                fontSize = 12.sp,
+                modifier = Modifier.padding(start = 4.dp),
+            )
+            Tooltip(stringResource(R.string.add_to_contents)) {
+                IconButton(onClick = { showAddDialog = true }) {
+                    Icon(
+                        XnotesIcons.plus,
+                        stringResource(R.string.add_to_contents),
+                        tint = palette.textDim.toComposeColor(),
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
             }
         }
+
+        if (outline.isEmpty() && pdfToc.isEmpty()) {
+            EmptyHint(stringResource(R.string.no_contents))
+        } else if (outline.isNotEmpty()) {
+            val visibleItems = remember(outlineVersion) { visibleOutlineItems(outline) }
+            LazyColumn(Modifier.fillMaxSize()) {
+                items(visibleItems.size, key = { visibleItems[it].second.id }) { i ->
+                    val (realIndex, item) = visibleItems[i]
+                    val hasChildren = realIndex + 1 < outline.size && outline[realIndex + 1].level > item.level
+                    val indentDp = (item.level.coerceAtMost(8) * 12).dp
+                    var menuOpen by remember { mutableStateOf(false) }
+
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(start = 4.dp + indentDp, end = 6.dp, top = 2.dp, bottom = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (hasChildren) {
+                            IconButton(
+                                onClick = { editor.toggleOutlineItemExpanded(realIndex) },
+                                modifier = Modifier.size(24.dp),
+                            ) {
+                                Icon(
+                                    if (item.expanded) XnotesIcons.chevronDown else XnotesIcons.chevronRight,
+                                    contentDescription = null,
+                                    tint = palette.textDim.toComposeColor(),
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        } else {
+                            Spacer(Modifier.width(24.dp))
+                        }
+
+                        Text(
+                            item.title,
+                            color = palette.text.toComposeColor(),
+                            fontSize = 12.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { editor.goToPage(item.page) }
+                                .padding(vertical = 4.dp),
+                        )
+
+                        Text(
+                            "p.${item.page + 1}",
+                            color = palette.textDim.toComposeColor(),
+                            fontSize = 11.sp,
+                            modifier = Modifier
+                                .clickable { editor.goToPage(item.page) }
+                                .padding(horizontal = 4.dp),
+                        )
+
+                        Box {
+                            IconButton(
+                                onClick = { menuOpen = true },
+                                modifier = Modifier.size(24.dp),
+                            ) {
+                                Icon(
+                                    XnotesIcons.more,
+                                    contentDescription = stringResource(R.string.page_options),
+                                    tint = palette.textDim.toComposeColor(),
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                val canIndent = realIndex > 0 && item.level <= outline[realIndex - 1].level
+                                val canOutdent = item.level > 0
+                                val canMoveUp = realIndex > 0
+                                val canMoveDown = realIndex < outline.lastIndex
+                                fun menuIcon(icon: ImageVector) = @Composable {
+                                    Icon(icon, null, tint = palette.textDim.toComposeColor(), modifier = Modifier.size(18.dp))
+                                }
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.indent)) },
+                                    leadingIcon = menuIcon(XnotesIcons.chevronRight),
+                                    enabled = canIndent,
+                                    onClick = { editor.indentOutlineItem(realIndex); menuOpen = false },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.outdent)) },
+                                    leadingIcon = menuIcon(XnotesIcons.chevronLeft),
+                                    enabled = canOutdent,
+                                    onClick = { editor.outdentOutlineItem(realIndex); menuOpen = false },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.move_up)) },
+                                    leadingIcon = menuIcon(XnotesIcons.arrowUp),
+                                    enabled = canMoveUp,
+                                    onClick = { editor.moveOutlineItem(realIndex, realIndex - 1); menuOpen = false },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.move_down)) },
+                                    leadingIcon = menuIcon(XnotesIcons.arrowDown),
+                                    enabled = canMoveDown,
+                                    onClick = { editor.moveOutlineItem(realIndex, realIndex + 1); menuOpen = false },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.rename)) },
+                                    leadingIcon = menuIcon(XnotesIcons.edit),
+                                    onClick = { itemToRename = realIndex to item; menuOpen = false },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.remove)) },
+                                    leadingIcon = menuIcon(XnotesIcons.trash),
+                                    onClick = { editor.removeOutlineItem(realIndex); menuOpen = false },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // Fallback for native PDF outline before conversion
+            LazyColumn(Modifier.fillMaxSize()) {
+                itemsIndexed(pdfToc) { _, e ->
+                    val hasTarget = e.destPage >= 0
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .then(if (hasTarget) Modifier.clickable { editor.goToTocEntry(e) } else Modifier)
+                            .padding(
+                                start = (10 + e.level.coerceAtMost(6) * 12).dp,
+                                end = 10.dp,
+                                top = 6.dp,
+                                bottom = 6.dp,
+                            ),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            e.title,
+                            color = (if (hasTarget) palette.text else palette.textDim).toComposeColor(),
+                            fontSize = 12.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (showAddDialog) {
+        val defaultLabel = stringResource(R.string.page_n, editor.pageIndex + 1)
+        var label by remember { mutableStateOf(defaultLabel) }
+        var pageText by remember { mutableStateOf((editor.pageIndex + 1).toString()) }
+        AlertDialog(
+            onDismissRequest = { showAddDialog = false },
+            title = { Text(stringResource(R.string.add_to_contents)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = label,
+                        onValueChange = { label = it },
+                        label = { Text("Title") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = pageText,
+                        onValueChange = { pageText = it },
+                        label = { Text("Page") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val targetPage = (pageText.toIntOrNull()?.minus(1) ?: editor.pageIndex)
+                        .coerceIn(0, editor.pageCount - 1)
+                    editor.addOutlineItem(targetPage, label.ifBlank { defaultLabel })
+                    showAddDialog = false
+                }) {
+                    Text(stringResource(R.string.add))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
+    itemToRename?.let { (idx, item) ->
+        var newTitle by remember { mutableStateOf(item.title) }
+        AlertDialog(
+            onDismissRequest = { itemToRename = null },
+            title = { Text(stringResource(R.string.rename)) },
+            text = {
+                OutlinedTextField(
+                    value = newTitle,
+                    onValueChange = { newTitle = it },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (newTitle.isNotBlank()) {
+                        editor.renameOutlineItem(idx, newTitle.trim())
+                    }
+                    itemToRename = null
+                }) {
+                    Text(stringResource(R.string.save))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { itemToRename = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
     }
 }
 

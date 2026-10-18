@@ -943,6 +943,9 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     val currentUri: String? get() = state.document.path
 
     val bookmarks: List<Bookmark> get() = state.document.bookmarks.toList()
+    val outline: List<com.xnotes.core.model.OutlineItem> get() = state.document.outline.toList()
+    var outlineVersion by mutableStateOf(0)
+        private set
 
     val controller: InteractionController = InteractionController(
         state,
@@ -1803,6 +1806,22 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             val entries = withContext(Dispatchers.IO) { src.outline() }
             if (pdfSource === src) {
                 toc = entries
+                if (state.document.outline.isEmpty() && entries.isNotEmpty()) {
+                    val pages = state.document.pages
+                    val converted = entries.mapNotNull { e ->
+                        if (e.destPage >= 0) {
+                            val exact = pages.indexOfFirst { it.pdfPage == e.destPage }
+                            val target = if (exact >= 0) exact else pages.indexOfLast { (it.pdfPage ?: -1) in 0..e.destPage }
+                            if (target >= 0) com.xnotes.core.model.OutlineItem(page = target, title = e.title, level = e.level) else null
+                        } else null
+                    }
+                    if (converted.isNotEmpty()) {
+                        state.document.outline.addAll(converted)
+                        state.document.normalizeOutlineLevels()
+                        state.document.dirty = true
+                    }
+                }
+                outlineVersion++
                 tocVersion++
             }
         }
@@ -3244,6 +3263,82 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             state.document.bookmarks.removeAt(index)
             state.document.dirty = true
             bookmarkVersion++
+            dirty = true
+        }
+    }
+
+    fun addOutlineItem(page: Int = state.currentPageIndex(), title: String, level: Int? = null) {
+        val targetPage = page.coerceIn(0, state.document.pages.lastIndex.coerceAtLeast(0))
+        val currentOutline = state.document.outline
+        val defaultLevel = level ?: currentOutline.lastOrNull()?.level ?: 0
+        val item = com.xnotes.core.model.OutlineItem(page = targetPage, title = title, level = defaultLevel)
+        currentOutline.add(item)
+        state.document.normalizeOutlineLevels()
+        state.document.dirty = true
+        outlineVersion++
+        dirty = true
+    }
+
+    fun removeOutlineItem(index: Int) {
+        if (index in state.document.outline.indices) {
+            state.document.outline.removeAt(index)
+            state.document.normalizeOutlineLevels()
+            state.document.dirty = true
+            outlineVersion++
+            dirty = true
+        }
+    }
+
+    fun indentOutlineItem(index: Int) {
+        val outlineList = state.document.outline
+        if (index in 1..outlineList.lastIndex) {
+            val maxAllowedLevel = outlineList[index - 1].level + 1
+            if (outlineList[index].level < maxAllowedLevel) {
+                outlineList[index].level++
+                state.document.dirty = true
+                outlineVersion++
+                dirty = true
+            }
+        }
+    }
+
+    fun outdentOutlineItem(index: Int) {
+        val outlineList = state.document.outline
+        if (index in outlineList.indices && outlineList[index].level > 0) {
+            outlineList[index].level--
+            state.document.normalizeOutlineLevels()
+            state.document.dirty = true
+            outlineVersion++
+            dirty = true
+        }
+    }
+
+    fun renameOutlineItem(index: Int, newTitle: String) {
+        val outlineList = state.document.outline
+        if (index in outlineList.indices) {
+            outlineList[index].title = newTitle
+            state.document.dirty = true
+            outlineVersion++
+            dirty = true
+        }
+    }
+
+    fun toggleOutlineItemExpanded(index: Int) {
+        val outlineList = state.document.outline
+        if (index in outlineList.indices) {
+            outlineList[index].expanded = !outlineList[index].expanded
+            outlineVersion++
+        }
+    }
+
+    fun moveOutlineItem(from: Int, to: Int) {
+        val outlineList = state.document.outline
+        if (from in outlineList.indices && to in outlineList.indices && from != to) {
+            val item = outlineList.removeAt(from)
+            outlineList.add(to, item)
+            state.document.normalizeOutlineLevels()
+            state.document.dirty = true
+            outlineVersion++
             dirty = true
         }
     }
@@ -6277,8 +6372,11 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         val page = Page(w, h)
         controller.clearSelection() // inserting shifts later page indices; drop any stale item selection
         pages.add(at, page)
+        state.document.onPageInserted(at)
         history.push(AddPage(state.document, page, at))
         state.document.dirty = true
+        outlineVersion++
+        bookmarkVersion++
         state.relayout()
         refreshContent()
         view.requestRender()
@@ -6318,9 +6416,12 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         val index = state.currentPageIndex()
         val page = state.document.pages[index]
         state.document.pages.removeAt(index)
+        state.document.onPageDeleted(index)
         history.push(DeletePage(state.document, page, index))
         state.document.dirty = true
         state.invalidatePage(page)
+        outlineVersion++
+        bookmarkVersion++
         state.relayout()
         refreshContent()
         view.requestRender()
@@ -6352,6 +6453,8 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
 
         history.push(MovePage(state.document, page, fromIndex, toIndex))
         state.document.dirty = true
+        outlineVersion++
+        bookmarkVersion++
         state.relayout()
 
         val newIndex = if (activePageBefore != null) {
@@ -6499,11 +6602,14 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         for (i in targets) { // descending, so each removeAt index stays valid and DeletePage stores the original index
             val page = pages[i]
             pages.removeAt(i)
+            state.document.onPageDeleted(i)
             state.invalidatePage(page)
             cmds.add(DeletePage(state.document, page, i))
         }
         history.push(CompositeCommand(cmds))
         clearPageSelection()
+        outlineVersion++
+        bookmarkVersion++
         afterPageEdit()
     }
 

@@ -4,6 +4,7 @@ import com.xnotes.core.geometry.Flip
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.model.Bookmark
+import com.xnotes.core.model.OutlineItem
 import com.xnotes.core.model.CanvasItem
 import com.xnotes.core.model.ConnectorEnd
 import com.xnotes.core.model.ConnectorItem
@@ -268,6 +269,19 @@ class DocumentCodec(
             j.endObject()
         }
         j.endArray()
+        if (doc.outline.isNotEmpty()) {
+            j.name("outline").beginArray()
+            for (o in doc.outline) {
+                j.beginObject()
+                j.name("id").value(o.id)
+                j.name("page").value(o.page)
+                j.name("title").value(o.title)
+                j.name("level").value(o.level)
+                j.name("expanded").value(o.expanded)
+                j.endObject()
+            }
+            j.endArray()
+        }
         j.name("pages").beginArray()
         val assetByPath = assets.associate { (name, file) -> file.absoluteFile.normalize().path to name }
         for (page in doc.pages) writePage(j, page, assetByPath)
@@ -682,6 +696,7 @@ class DocumentCodec(
         }
 
         doc.bookmarks.addAll(m.bookmarks)
+        doc.outline.addAll(m.outline)
         flowBytes?.let { FlowXml.readInto(doc.flow, it) }
 
         if (m.pages.isEmpty()) {
@@ -743,6 +758,7 @@ class DocumentCodec(
         var style = PageStyle()
         var margins = PageMargins()
         val bookmarks = ArrayList<Bookmark>()
+        val outline = ArrayList<OutlineItem>()
         val pages = ArrayList<Page>()
         val pageImages = ArrayList<Triple<Page, List<PendingImage>, GlueRead>>()
         val pageGlue = ArrayList<GlueRead>()
@@ -825,6 +841,7 @@ class DocumentCodec(
                 "style" -> m.style = parseStyle(p)
                 "margins" -> m.margins = parseMargins(p)
                 "bookmarks" -> parseBookmarks(p, m.bookmarks)
+                "outline" -> parseOutline(p, m.outline)
                 "pages" -> parsePages(p, m)
                 else -> p.skipValue()
             }
@@ -853,6 +870,36 @@ class DocumentCodec(
             }
             p.endObject()
             out.add(Bookmark(page, label))
+        }
+        p.endArray()
+    }
+
+    private fun parseOutline(p: JsonPull, out: MutableList<OutlineItem>) {
+        if (p.peek() != JsonPull.Token.BEGIN_ARRAY) return p.skipValue()
+        p.beginArray()
+        while (p.hasNext()) {
+            if (p.peek() != JsonPull.Token.BEGIN_OBJECT) {
+                p.skipValue()
+                continue
+            }
+            var id = java.util.UUID.randomUUID().toString()
+            var page = 0
+            var title = ""
+            var level = 0
+            var expanded = true
+            p.beginObject()
+            while (p.hasNext()) {
+                when (p.nextName()) {
+                    "id" -> id = stringOr(p, id)
+                    "page" -> page = intOr(p, 0)
+                    "title" -> title = stringOr(p, "")
+                    "level" -> level = intOr(p, 0)
+                    "expanded" -> expanded = boolOr(p, true)
+                    else -> p.skipValue()
+                }
+            }
+            p.endObject()
+            out.add(OutlineItem(id, page, title, level, expanded))
         }
         p.endArray()
     }

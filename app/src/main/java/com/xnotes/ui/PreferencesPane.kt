@@ -190,7 +190,10 @@ fun PreferencesPane(
     Box(
         Modifier.fillMaxSize()
             .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } }
-            .onGloballyPositioned { paneTopLeft = it.boundsInRoot().topLeft },
+            .onGloballyPositioned {
+                val b = it.boundsInRoot()
+                if (b.left >= 0) paneTopLeft = b.topLeft
+            },
     ) {
     Column(Modifier.fillMaxSize()) {
         // Leading button inline with the title, at a constant row height so toggling the sidebar never
@@ -219,8 +222,9 @@ fun PreferencesPane(
         Column(
             modifier = Modifier.fillMaxSize().imePadding().verticalScroll(scrollState)
                 .onGloballyPositioned {
-                    if (viewport == Rect.Zero || dragItem != null || dragSection != null) {
-                        viewport = it.boundsInRoot()
+                    val b = it.boundsInRoot()
+                    if (b.left >= 0 && (viewport == Rect.Zero || dragItem != null || dragSection != null)) {
+                        viewport = b
                     }
                 },
             verticalArrangement = Arrangement.spacedBy(14.dp),

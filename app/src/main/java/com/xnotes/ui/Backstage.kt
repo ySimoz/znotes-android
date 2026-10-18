@@ -628,7 +628,7 @@ private fun BackstageMain(
         }
         var warmPrefs by remember { mutableStateOf(false) }
         LaunchedEffect(Unit) {
-            delay(1500)
+            delay(400)
             warmPrefs = true
         }
         val shouldComposePrefs = warmPrefs || view == BackstageView.PREFERENCES
@@ -656,12 +656,28 @@ private fun BackstageMain(
             },
             modifier = Modifier.weight(1f).fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
         ) { measurables, constraints ->
-            val target = measurables.firstOrNull { it.layoutId == view }
-                ?: measurables.firstOrNull { it.layoutId == BackstageView.HOME }
+            val homeMeasurable = measurables.firstOrNull { it.layoutId == BackstageView.HOME }
+            val prefsMeasurable = measurables.firstOrNull { it.layoutId == BackstageView.PREFERENCES }
+            val activeMeasurable = measurables.firstOrNull { it.layoutId == view }
+                ?: homeMeasurable
                 ?: measurables.first()
-            val placeable = target.measure(constraints)
+
+            val homePlaceable = homeMeasurable?.measure(constraints)
+            val prefsPlaceable = prefsMeasurable?.measure(constraints)
+            val activePlaceable = if (view == BackstageView.HOME) homePlaceable
+                else if (view == BackstageView.PREFERENCES) prefsPlaceable
+                else activeMeasurable.measure(constraints)
+
             layout(constraints.maxWidth, constraints.maxHeight) {
-                placeable.place(0, 0)
+                activePlaceable?.place(0, 0)
+                if (view == BackstageView.HOME) {
+                    prefsPlaceable?.place(-10000, -10000)
+                } else if (view == BackstageView.PREFERENCES) {
+                    homePlaceable?.place(-10000, -10000)
+                } else {
+                    homePlaceable?.place(-10000, -10000)
+                    prefsPlaceable?.place(-10000, -10000)
+                }
             }
         }
     }

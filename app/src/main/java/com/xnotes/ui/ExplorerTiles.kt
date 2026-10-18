@@ -103,6 +103,7 @@ internal class EntryActions(
     val saveCopy: (BrowseEntry) -> Unit,
     val exportPdf: (BrowseEntry) -> Unit,
     val preview: (BrowseEntry) -> Unit,
+    val openBeside: ((BrowseEntry) -> (() -> Unit)?)? = null,
 )
 
 /** Everything an explorer layout draws from: the view, what's in it, and how to describe each item. */
@@ -236,7 +237,7 @@ internal fun ThumbBadges(b: ExplorerBody, e: BrowseEntry, inset: Dp = 8.dp) {
 }
 
 @Composable
-private fun EntryMenuButton(b: ExplorerBody, e: BrowseEntry, tint: Color, size: Dp = 32.dp) {
+internal fun EntryMenuButton(b: ExplorerBody, e: BrowseEntry, tint: Color, size: Dp = 32.dp) {
     var open by remember { mutableStateOf(false) }
     Box {
         Tooltip(stringResource(R.string.more)) {
@@ -264,6 +265,7 @@ internal fun EntryMenuFor(b: ExplorerBody, e: BrowseEntry, expanded: Boolean, on
         onNameColor = e.color?.let { c -> { m.nameColor(c) } },
         onMoveTo = { m.moveTo(e) },
         onPreview = if (e.isDir) null else ({ m.preview(e) }),
+        onOpenBeside = if (e.isDir) null else m.openBeside?.invoke(e),
         deleteLabel = b.deleteLabel,
     )
 }
@@ -534,23 +536,31 @@ internal fun GalleryItem(b: ExplorerBody, e: BrowseEntry, shelf: Dp) {
                 }
             }
         }
-        Spacer(Modifier.height(10.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.padding(horizontal = 4.dp)) {
-            if (code != null) Box(Modifier.size(8.dp).clip(CircleShape).background(code))
-            Text(b.label(e), color = palette.text.toComposeColor(), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        Spacer(Modifier.height(3.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.padding(horizontal = 4.dp)) {
-            if (b.view.showKind && (kind == EntryKind.PDF || kind == EntryKind.CANVAS)) {
-                Icon(kindIcon(kind), null, tint = palette.textDim.toComposeColor(), modifier = Modifier.size(13.dp))
+        Spacer(Modifier.height(8.dp))
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    if (code != null) Box(Modifier.size(8.dp).clip(CircleShape).background(code))
+                    Text(b.label(e), color = palette.text.toComposeColor(), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Spacer(Modifier.height(3.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    if (b.view.showKind && (kind == EntryKind.PDF || kind == EntryKind.CANVAS)) {
+                        Icon(kindIcon(kind), null, tint = palette.textDim.toComposeColor(), modifier = Modifier.size(13.dp))
+                    }
+                    val count = when {
+                        !b.view.showPages -> null
+                        kind == EntryKind.CANVAS -> stringResource(R.string.kind_canvas)
+                        pages > 0 -> pluralStringResource(R.plurals.pages_count, pages, pages)
+                        else -> null
+                    }
+                    Text(listOfNotNull(count, b.metaText(e).ifEmpty { null }).joinToString(" · "), color = palette.textDim.toComposeColor(), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
-            val count = when {
-                !b.view.showPages -> null
-                kind == EntryKind.CANVAS -> stringResource(R.string.kind_canvas)
-                pages > 0 -> pluralStringResource(R.plurals.pages_count, pages, pages)
-                else -> null
-            }
-            Text(listOfNotNull(count, b.metaText(e).ifEmpty { null }).joinToString(" · "), color = palette.textDim.toComposeColor(), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (!selecting) EntryMenuButton(b, e, palette.textDim.toComposeColor())
         }
     }
 }
@@ -582,16 +592,22 @@ internal fun TimelineCard(b: ExplorerBody, e: BrowseEntry, side: Dp) {
             }
             if (selecting) CheckRing(selected, Modifier.align(Alignment.TopStart).padding(6.dp))
         }
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(b.label(e), color = palette.text.toComposeColor(), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(formatClock(b.words, b.view.timelineTime(e), b.clock24, b.zone), color = palette.textDim.toComposeColor(), fontSize = 11.5.sp, maxLines = 1)
-                val where = b.whereOf?.invoke(e)
-                if (where != null) {
-                    Icon(XnotesIcons.folder, null, tint = palette.textDim.toComposeColor(), modifier = Modifier.size(12.dp))
-                    Text(where, color = palette.textDim.toComposeColor(), fontSize = 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(b.label(e), color = palette.text.toComposeColor(), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text(formatClock(b.words, b.view.timelineTime(e), b.clock24, b.zone), color = palette.textDim.toComposeColor(), fontSize = 11.5.sp, maxLines = 1)
+                    val where = b.whereOf?.invoke(e)
+                    if (where != null) {
+                        Icon(XnotesIcons.folder, null, tint = palette.textDim.toComposeColor(), modifier = Modifier.size(12.dp))
+                        Text(where, color = palette.textDim.toComposeColor(), fontSize = 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
             }
+            if (!selecting) EntryMenuButton(b, e, palette.textDim.toComposeColor(), size = 28.dp)
         }
     }
 }
@@ -701,13 +717,18 @@ private fun RecentCard(b: ExplorerBody, r: RecentEntry, onOpen: (BrowseEntry) ->
             ThumbBadges(b, e, 6.dp)
         }
         Spacer(Modifier.height(4.dp))
-        Text(b.label(e), color = palette.text.toComposeColor(), fontSize = 13.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(openedLabel(b.words, r.opened, b.now, b.zone), color = palette.textDim.toComposeColor(), fontSize = 11.5.sp, maxLines = 1)
-        r.where?.let { where ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                Icon(XnotesIcons.folder, null, tint = palette.textDim.toComposeColor(), modifier = Modifier.size(12.dp))
-                Text(where, color = palette.textDim.toComposeColor(), fontSize = 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(b.label(e), color = palette.text.toComposeColor(), fontSize = 13.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(openedLabel(b.words, r.opened, b.now, b.zone), color = palette.textDim.toComposeColor(), fontSize = 11.5.sp, maxLines = 1)
+                r.where?.let { where ->
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Icon(XnotesIcons.folder, null, tint = palette.textDim.toComposeColor(), modifier = Modifier.size(12.dp))
+                        Text(where, color = palette.textDim.toComposeColor(), fontSize = 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
             }
+            EntryMenuButton(b, e, palette.textDim.toComposeColor(), size = 28.dp)
         }
     }
 }

@@ -100,6 +100,7 @@ fun Toolbar(
     onAddStickers: () -> Unit,
     onClosePane: (() -> Unit)? = null,
     onImportTemplate: () -> Unit = {},
+    onOpenBeside: ((String) -> Unit)? = null,
 ) {
     // The five stroke tools use the designed vector drawables (res/drawable/ic_stroke_*),
     // tinted at the call site like every other icon; the rest use the built-in line set.
@@ -144,6 +145,7 @@ fun Toolbar(
                     onAddStickers = onAddStickers,
                     onToggleFullscreen = onToggleFullscreen,
                     onImportTemplate = onImportTemplate,
+                    onOpenBeside = onOpenBeside,
                 )
             }
         }
@@ -178,6 +180,7 @@ private fun ToolbarItemView(
     onAddStickers: () -> Unit,
     onToggleFullscreen: () -> Unit,
     onImportTemplate: () -> Unit,
+    onOpenBeside: ((String) -> Unit)? = null,
 ) {
     when (item) {
         // Canvas-only items; a stored paged layout can never hold one, so nothing is drawn.
@@ -196,7 +199,7 @@ private fun ToolbarItemView(
                             .widthIn(max = 200.dp)
                             .clip(MaterialTheme.shapes.extraSmall)
                             .clickable { tabSwitcherOpen = true }
-                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
                     ) {
                         Label(
                             if (editor.state.document.displayName == null && editor.state.document.path == null) stringResource(R.string.untitled) else editor.title,
@@ -241,20 +244,39 @@ private fun ToolbarItemView(
                                     }
                                 },
                                 trailingIcon = {
-                                    if (editor.tabManager.count > 1) {
-                                        IconButton(
-                                            onClick = {
-                                                editor.closeTab(index)
-                                                if (editor.tabManager.count == 0) tabSwitcherOpen = false
-                                            },
-                                            modifier = Modifier.size(24.dp),
-                                        ) {
-                                            Icon(
-                                                imageVector = XnotesIcons.close,
-                                                contentDescription = stringResource(R.string.close_pane),
-                                                tint = palette.textDim.toComposeColor(),
-                                                modifier = Modifier.size(12.dp),
-                                            )
+                                    val tabUri = tab.uri
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (onOpenBeside != null && tabUri != null && editor.sibling == null && !isActive) {
+                                            IconButton(
+                                                onClick = {
+                                                    tabSwitcherOpen = false
+                                                    onOpenBeside(tabUri)
+                                                },
+                                                modifier = Modifier.size(24.dp),
+                                            ) {
+                                                Icon(
+                                                    imageVector = XnotesIcons.split,
+                                                    contentDescription = stringResource(R.string.open_side_by_side),
+                                                    tint = palette.textDim.toComposeColor(),
+                                                    modifier = Modifier.size(14.dp),
+                                                )
+                                            }
+                                        }
+                                        if (editor.tabManager.count > 1) {
+                                            IconButton(
+                                                onClick = {
+                                                    editor.closeTab(index)
+                                                    if (editor.tabManager.count == 0) tabSwitcherOpen = false
+                                                },
+                                                modifier = Modifier.size(24.dp),
+                                            ) {
+                                                Icon(
+                                                    imageVector = XnotesIcons.close,
+                                                    contentDescription = stringResource(R.string.close_pane),
+                                                    tint = palette.textDim.toComposeColor(),
+                                                    modifier = Modifier.size(12.dp),
+                                                )
+                                            }
                                         }
                                     }
                                 },

@@ -722,6 +722,9 @@ private fun EditorScreen(
             if (!second.noteOpen) {
                 editor.abandonSecondary()
                 editor.message = context.getString(R.string.err_open_second)
+            } else {
+                editor.closeTabByUri(secondUri)
+                second.closeTabByUri(firstUri)
             }
         }
     }
@@ -1035,6 +1038,11 @@ private fun EditorScreen(
                     pendingPdfInsert = PendingPdfInsert(pane, after)
                     insertPdfLauncher.launch(arrayOf("application/pdf"))
                 },
+                onOpenBeside = { uri ->
+                    editor.currentUri?.let { first ->
+                        guardedAll { openSplit(first, uri) }
+                    }
+                },
             )
             SplitHost(editor, actions)
         }
@@ -1186,6 +1194,7 @@ private class PaneActions(
     val onSavePagesAsPdf: (Editor, List<Int>) -> Unit,
     val onSavePagesAsImages: (Editor, List<Int>) -> Unit,
     val onInsertPdf: (Editor, Int) -> Unit,
+    val onOpenBeside: ((String) -> Unit)? = null,
 )
 
 /** Neither pane of a split may be squeezed below this share of the split axis. */
@@ -1387,6 +1396,7 @@ private fun EditorPane(
                     onAddStickers = actions.onAddStickers,
                     onClosePane = onClose,
                     onImportTemplate = actions.onImportTemplate,
+                    onOpenBeside = actions.onOpenBeside,
                 )
             }
             ToolbarAround(bar, onCover = editor::setToolbarCover) { floatingBar ->

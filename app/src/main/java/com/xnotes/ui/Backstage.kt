@@ -1346,6 +1346,7 @@ private fun ExplorerSection(
                 saveCopy = { callsNow.value.saveCopyFile(it.documentUri) },
                 exportPdf = { callsNow.value.exportFilePdf(it.documentUri) },
                 preview = { previewing = it },
+                openBeside = { e -> callsNow.value.openBeside(e.documentUri) },
             ),
         )
     }
@@ -2156,6 +2157,7 @@ internal fun EntryMenu(
     onNameColor: (() -> Unit)? = null,
     onMoveTo: (() -> Unit)? = null,
     onPreview: (() -> Unit)? = null,
+    onOpenBeside: (() -> Unit)? = null,
     deleteLabel: String = stringResource(R.string.delete),
 ) {
     val palette = LocalPalette.current
@@ -2171,6 +2173,11 @@ internal fun EntryMenu(
         if (showColors) {
             ColorCodeMenuContent { c -> onDismiss(); onColor?.invoke(c) }
         } else {
+            if (onOpenBeside != null) DropdownMenuItem(
+                text = { Text(stringResource(R.string.open_side_by_side)) },
+                leadingIcon = { Icon(XnotesIcons.split, null, tint = palette.text.toComposeColor(), modifier = Modifier.size(20.dp)) },
+                onClick = { onDismiss(); onOpenBeside() },
+            )
             if (onPreview != null) DropdownMenuItem(text = { Text(stringResource(R.string.preview)) }, onClick = { onDismiss(); onPreview() })
             DropdownMenuItem(text = { Text(stringResource(R.string.rename)) }, onClick = { onDismiss(); onRename?.invoke() })
             if (onMoveTo != null) DropdownMenuItem(text = { Text(stringResource(R.string.move_to_folder)) }, onClick = { onDismiss(); onMoveTo() })

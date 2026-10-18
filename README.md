@@ -1,31 +1,38 @@
 <p align="center">
-  <img src="docs/readme-banner.png" width="100%" alt="xnotes: a handwriting-first notebook for Android" />
+  <img src="docs/readme-banner.png" width="100%" alt="zNotes: a handwriting-first notebook for Android" />
 </p>
 
 <p align="center">
-  <a href="https://github.com/shardulvs/xnotes-android/releases/latest"><img src="https://img.shields.io/github/v/release/shardulvs/xnotes-android?style=flat-square&label=release&color=blue" alt="Release" /></a>
-  <a href="https://f-droid.org/en/packages/com.xnotes"><img src="https://img.shields.io/f-droid/v/com.xnotes?style=flat-square" alt="F-Droid" /></a>
+  <a href="https://github.com/ySimoz/znotes-android/releases/latest"><img src="https://img.shields.io/github/v/release/ySimoz/znotes-android?style=flat-square&label=release&color=0088cc" alt="Release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="License" /></a>
   <img src="https://img.shields.io/badge/Android-8.0%2B-3ddc84?style=flat-square&logo=android&logoColor=white" alt="Android 8.0+" />
-  <a href="https://github.com/sponsors/shardulvs"><img src="https://img.shields.io/badge/sponsor-%E2%9D%A4-ec6cb9?style=flat-square&logo=githubsponsors&logoColor=white" alt="Sponsor" /></a>
 </p>
 
 <p align="center">
-  <a href="https://f-droid.org/en/packages/com.xnotes"><img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" height="70" alt="Get it on F-Droid" /></a>
-  <a href="https://play.google.com/store/apps/details?id=com.xnotes"><img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" height="70" alt="Get it on Google Play" /></a>
-</p>
-
-<p align="center">
-  <img src="docs/screenshots/editor.png" width="90%" alt="The xnotes editor with a PDF open in dark mode, annotated by hand with a note, an arrow, a highlight and an underline, and page thumbnails down the left" />
+  <img src="docs/screenshots/editor.png" width="90%" alt="The zNotes editor with a PDF open in dark mode, annotated by hand with a note, an arrow, a highlight and an underline, and page thumbnails down the left" />
   <br />
   <em>Annotating a PDF in dark mode, with the pages inverted</em>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/explorer.png" width="90%" alt="The xnotes file explorer in gallery view, showing a grid of imported book covers with page counts" />
+  <img src="docs/screenshots/explorer.png" width="90%" alt="The zNotes file explorer in gallery view, showing a grid of imported book covers with page counts" />
   <br />
   <em>Browsing imported PDFs in the gallery view</em>
 </p>
+
+---
+
+## zNotes Added Features
+
+Enhancements introduced in this fork:
+
+- **Multi-Note Tab Bar & Switcher**: Open, view, and switch between multiple notes simultaneously without tearing down the OpenGL canvas context.
+- **Folder Tree Sidebar**: Interactive hierarchical folder navigation in the backstage drawer with drag-and-drop file organization.
+- **Unified 3-Dots Folder Actions**: Context menu on folders across all explorer views (Gallery, Grid, Columns, and sidebar Folder Tree).
+- **Instant Preferences Engine**: Eliminated first-tap frame freezes with background pre-warming and off-screen pre-rendering, achieving 144Hz fluidity.
+- **Honor Magic-Pencil Double-Tap**: Native tool toggling support for Honor Magic-Pencil 3 via keycode 755.
+- **zNotes Cyberpunk Brand Identity**: Cyan/orange chromatic mark and instant vector brand launcher animation.
+- **Multilingual Support**: Italian localization (`it`) alongside English, Simplified Chinese, and system default language selection in Preferences.
 
 ---
 
@@ -59,20 +66,14 @@
 
 ## Install
 
-| Channel | |
-|---|---|
-| [GitHub Releases](https://github.com/shardulvs/xnotes-android/releases/latest) | Signed APK |
-| [F-Droid](https://f-droid.org/en/packages/com.xnotes) | Built reproducibly from source |
-| [Google Play](https://play.google.com/store/apps/details?id=com.xnotes) | Automatic updates |
-
-GitHub and F-Droid ship the same signed APK, so you can switch between them without reinstalling.
+Download the signed APK from [GitHub Releases](https://github.com/ySimoz/znotes-android/releases/latest).
 
 ## Build from source
 
 Needs JDK 17, NDK 27.0.12077973 and CMake 3.22.1.
 
 ```bash
-git clone https://github.com/shardulvs/xnotes-android.git
-cd xnotes-android
+git clone https://github.com/ySimoz/znotes-android.git
+cd znotes-android
 JAVA_HOME=/path/to/jdk-17 ./gradlew assembleDebug
 ```

@@ -661,11 +661,19 @@ private fun EditorScreen(
 
     // The prompt is about one pane's note, so it asks about — and saves — the pane being acted on.
     fun guarded(target: Editor = editor.active, action: () -> Unit) {
+        val saveUri = target.autosaveUri ?: target.currentUri ?: target.state.document.path
         when {
             // A canvas keeps its own autosave, and dirty/autosaveUri describe the paged buffer
             // underneath it, so asking about those here would prompt over a note nobody is looking at.
             target.canvasOpen -> action()
-            target.autosaveUri != null -> action() // autosaved notes are flushed on doc-swap; no prompt
+            saveUri != null -> {
+                target.maybeBindAutosave(saveUri)
+                if (target.dirty) {
+                    target.saveToThen(saveUri) { action() }
+                } else {
+                    action()
+                }
+            }
             target.dirty -> guardAction = GuardRequest(target, action)
             else -> action()
         }
@@ -1084,7 +1092,7 @@ private fun EditorScreen(
             confirmButton = {
                 androidx.compose.material3.TextButton(onClick = {
                     guardAction = null
-                    val uri = guarded.currentUri
+                    val uri = guarded.autosaveUri ?: guarded.currentUri ?: guarded.state.document.path
                     if (uri != null) {
                         // Off-thread: what the prompt was guarding runs once the bytes have landed.
                         guarded.saveToThen(uri) { action() }
@@ -1096,7 +1104,11 @@ private fun EditorScreen(
             },
             dismissButton = {
                 androidx.compose.foundation.layout.Row {
-                    androidx.compose.material3.TextButton(onClick = { guardAction = null; action() }) {
+                    androidx.compose.material3.TextButton(onClick = {
+                        guardAction = null
+                        guarded.discardChanges()
+                        action()
+                    }) {
                         androidx.compose.material3.Text(stringResource(R.string.discard))
                     }
                     androidx.compose.material3.TextButton(onClick = { guardAction = null }) {

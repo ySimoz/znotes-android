@@ -3262,7 +3262,13 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     suspend fun openAsync(uri: String, name: String? = null) {
         val existing = tabManager.findTabByUri(uri)
         if (existing != null) {
-            switchToTabByUri(uri)
+            val idx = tabManager.indexOfUri(uri)
+            if (idx == tabManager.activeIndex) {
+                bindTabSession(existing)
+            } else {
+                switchToTab(idx)
+            }
+            maybeBindAutosave(uri)
             noteOpen = true
             return
         }
@@ -4696,9 +4702,22 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         message = appContext.getString(R.string.canvas_forked, com.xnotes.core.util.DocumentKind.stripSuffix(fork.name))
     }
 
-    private fun maybeBindAutosave(uri: String?) {
+    fun maybeBindAutosave(uri: String?) {
         autosaveUri = if (uri != null && browseRoot?.let { isUnderTree(uri, it) } == true) uri else null
         autosaveUri?.let { rememberStamp(it) }
+    }
+
+    /** Discards unsaved edits for the active document/tab, cleaning dirty state so it won't prompt repeatedly. */
+    fun discardChanges() {
+        state.document.dirty = false
+        dirty = false
+        val active = tabManager.activeTab
+        if (active != null) {
+            active.document.dirty = false
+            if (active.uri == null && active.autosaveUri == null) {
+                closeTab(tabManager.activeIndex, flushAutosave = false)
+            }
+        }
     }
 
     /**
@@ -5828,7 +5847,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             cur.scrollY = state.scrollY
             cur.viewOverrides = viewOverrides
             cur.didInitialFit = state.didInitialFit
-            cur.autosaveUri = autosaveUri
+            if (autosaveUri != null) cur.autosaveUri = autosaveUri
             history.copyTo(cur.history)
         }
     }
@@ -5853,10 +5872,11 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             title = title,
             documentFactory = { session },
             onEvict = { evicted ->
-                if (evicted.isDirty && evicted.autosaveUri != null) {
+                val evictUri = evicted.autosaveUri ?: evicted.uri ?: evicted.document.path
+                if (evicted.isDirty && evictUri != null) {
                     val snap = evicted.document.snapshot()
                     autosaveScope.launch(kotlinx.coroutines.NonCancellable + kotlinx.coroutines.Dispatchers.IO) {
-                        startNoteWrite(evicted.autosaveUri!!, snap, evicted.document.displayName ?: evicted.document.title, System.nanoTime())
+                        startNoteWrite(evictUri, snap, evicted.document.displayName ?: evicted.document.title, System.nanoTime())
                     }
                 }
             }
@@ -5882,7 +5902,12 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         clearPageSelection()
         state.document = session.document
         history.replaceWith(session.history)
-        autosaveUri = session.autosaveUri
+        val targetUri = session.uri ?: session.autosaveUri ?: session.document.path
+        maybeBindAutosave(targetUri)
+        if (autosaveUri == null && session.autosaveUri != null) {
+            autosaveUri = session.autosaveUri
+        }
+        session.autosaveUri = autosaveUri
         rebuildPdfSource()
         openPdfTemp = session.document.pdfFile // track without deleting
         state.invalidateAllCaches()
@@ -5931,14 +5956,14 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
 
     fun closeTab(index: Int, flushAutosave: Boolean = true) {
         val tabToClose = tabManager.tabs.getOrNull(index) ?: return
+        val saveUri = tabToClose.autosaveUri ?: tabToClose.uri ?: tabToClose.document.path
         // Flush autosave if dirty and allowed
-        if (flushAutosave && tabToClose.isDirty && tabToClose.autosaveUri != null) {
-            val uri = tabToClose.autosaveUri!!
+        if (flushAutosave && tabToClose.isDirty && saveUri != null) {
             val snap = tabToClose.document.snapshot()
             autosaveScope.launch(kotlinx.coroutines.NonCancellable + kotlinx.coroutines.Dispatchers.IO) {
-                startNoteWrite(uri, snap, tabToClose.document.displayName ?: tabToClose.document.title, System.nanoTime())
+                startNoteWrite(saveUri, snap, tabToClose.document.displayName ?: tabToClose.document.title, System.nanoTime())
             }
-        } else if (!flushAutosave) {
+        } else if (!flushAutosave || saveUri == null) {
             tabToClose.autosaveUri = null
             tabToClose.document.path = null
             tabToClose.document.dirty = false
@@ -7950,11 +7975,11 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         commitText() // commit an open text box before leaving (also hides its keyboard)
         flowText.endSession() // end any live flow caret (flushes typing, hides the keyboard)
         saveViewState() // remember this folder note's view before leaving
+        saveActiveTabState()
         flushThen(showOverlay = true) {
             // Regenerate this folder note's grid tile now that editing is done (off-thread, low priority);
             // a non-folder note (no autosave binding) isn't in the explorer, so there's nothing to do.
             autosaveUri?.let { uri -> autosaveScope.launch { regenerateClosedNoteThumb(uri) } }
-            autosaveUri = null
             noteOpen = false
         }
     }

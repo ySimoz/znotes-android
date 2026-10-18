@@ -95,6 +95,18 @@ class NoteTabManager(val maxTabs: Int = MAX_TABS_DEFAULT) {
     }
 
     /**
+     * Closes all tabs matching [predicate]. Returns list of closed sessions.
+     */
+    fun closeMatching(predicate: (NoteTabSession) -> Boolean): List<NoteTabSession> {
+        val closed = mutableListOf<NoteTabSession>()
+        val matchingIndices = tabs.indices.filter { predicate(tabs[it]) }.reversed()
+        for (idx in matchingIndices) {
+            closeTab(idx)?.let { closed.add(it) }
+        }
+        return closed
+    }
+
+    /**
      * Moves a tab from [fromIndex] to [toIndex], updating [activeIndex] accordingly.
      */
     fun moveTab(fromIndex: Int, toIndex: Int): Boolean {

@@ -130,4 +130,69 @@ class NoteTabManagerTest {
         assertEquals(1, manager.activeIndex)
         assertEquals("uri://1", manager.activeTab?.uri)
     }
+
+    @Test
+    fun closeMatchingClosesSingleMatchingTabAndAdjustsActiveIndex() {
+        val manager = NoteTabManager(maxTabs = 8)
+        manager.openOrSelectTab("uri://1", "Note 1", { makeSession("uri://1", "Note 1") })
+        manager.openOrSelectTab("uri://2", "Note 2", { makeSession("uri://2", "Note 2") })
+        manager.openOrSelectTab("uri://3", "Note 3", { makeSession("uri://3", "Note 3") })
+
+        manager.selectTab(1) // Active is Note 2
+        assertEquals(1, manager.activeIndex)
+
+        // Close matching Note 2
+        val closed = manager.closeMatching { it.uri == "uri://2" }
+        assertEquals(1, closed.size)
+        assertEquals("uri://2", closed[0].uri)
+
+        assertEquals(2, manager.count)
+        assertEquals(1, manager.activeIndex)
+        assertEquals("uri://3", manager.activeTab?.uri)
+        assertEquals("uri://1", manager.tabs[0].uri)
+        assertEquals("uri://3", manager.tabs[1].uri)
+    }
+
+    @Test
+    fun closeMatchingClosesMultipleMatchingTabs() {
+        val manager = NoteTabManager(maxTabs = 8)
+        manager.openOrSelectTab("folder/note1", "Note 1", { makeSession("folder/note1", "Note 1") })
+        manager.openOrSelectTab("folder/note2", "Note 2", { makeSession("folder/note2", "Note 2") })
+        manager.openOrSelectTab("other/note3", "Note 3", { makeSession("other/note3", "Note 3") })
+        manager.openOrSelectTab("folder/note4", "Note 4", { makeSession("folder/note4", "Note 4") })
+
+        manager.selectTab(0) // Active is folder/note1
+
+        // Close all tabs starting with "folder/"
+        val closed = manager.closeMatching { it.uri?.startsWith("folder/") == true }
+        assertEquals(3, closed.size)
+
+        assertEquals(1, manager.count)
+        assertEquals(0, manager.activeIndex)
+        assertEquals("other/note3", manager.activeTab?.uri)
+    }
+
+    @Test
+    fun closeMatchingClosesAllTabs() {
+        val manager = NoteTabManager(maxTabs = 8)
+        manager.openOrSelectTab("uri://1", "Note 1", { makeSession("uri://1", "Note 1") })
+        manager.openOrSelectTab("uri://2", "Note 2", { makeSession("uri://2", "Note 2") })
+
+        val closed = manager.closeMatching { true }
+        assertEquals(2, closed.size)
+        assertEquals(0, manager.count)
+        assertEquals(-1, manager.activeIndex)
+    }
+
+    @Test
+    fun closeMatchingNoOpWhenNoMatch() {
+        val manager = NoteTabManager(maxTabs = 8)
+        manager.openOrSelectTab("uri://1", "Note 1", { makeSession("uri://1", "Note 1") })
+        manager.openOrSelectTab("uri://2", "Note 2", { makeSession("uri://2", "Note 2") })
+
+        val closed = manager.closeMatching { it.uri == "uri://unknown" }
+        assertEquals(0, closed.size)
+        assertEquals(2, manager.count)
+    }
 }
+

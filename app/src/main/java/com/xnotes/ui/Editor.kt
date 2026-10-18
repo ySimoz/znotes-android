@@ -4223,6 +4223,14 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             if (autosaveUri == docUri) autosaveUri = resultUri
             title = state.document.title
         }
+        tabManager.findTabByUri(docUri)?.let { tab ->
+            tab.uri = resultUri
+            tab.autosaveUri = resultUri
+            tab.document.path = resultUri
+            tab.document.displayName = newName
+            tab.title = newName.removeSuffix(".xnote")
+            persistTabs()
+        }
         onDocumentMoved(docUri, resultUri, newName)
         refreshBrowseTree()
         return true
@@ -4306,6 +4314,8 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
      * it to recents, autosave rewriting its file, or the unsaved-changes guard offering to save it.
      */
     private fun purgeDeleted(docUri: String) {
+        detachIfOpen(docUri)
+
         val target = android.net.Uri.parse(docUri)
         val delId = runCatching { android.provider.DocumentsContract.getDocumentId(target) }.getOrNull() ?: return
         val auth = target.authority
@@ -4317,8 +4327,6 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         // instead of inheriting the dead note's view.
         val keyPrefix = "$auth|$delId"
         viewStates.removeMatching { it == keyPrefix || it.startsWith("$keyPrefix/") }
-
-        detachIfOpen(docUri)
 
         // Forget the deleted item's tracked creation time (and the whole subtree's, for a folder),
         // matched the same way as the view state, and drop its cached tile.
@@ -4336,29 +4344,52 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     }
 
     /**
-     * The note on screen was just deleted or trashed. Detach it at once (cancel autosave, drop its path, mark it
-     * clean) so nothing can rewrite the file or prompt to "save" it back, then drop the document itself for a
-     * fresh blank note on the main thread. The identity guard skips that reset if another note opened meanwhile.
+     * The note on screen or open in tabs was just deleted or trashed. Detach it at once (cancel autosave, drop its path,
+     * mark it clean) so nothing can rewrite the file or prompt to "save" it back, then close its matching tab(s) without
+     * flushing autosave.
      */
     private fun detachIfOpen(docUri: String) {
         val target = android.net.Uri.parse(docUri)
-        val delId = runCatching { android.provider.DocumentsContract.getDocumentId(target) }.getOrNull() ?: return
+        val delId = runCatching { android.provider.DocumentsContract.getDocumentId(target) }.getOrNull()
         val auth = target.authority
+        val delKey = documentKey(docUri)
         fun matches(uri: String): Boolean {
-            val u = android.net.Uri.parse(uri)
-            val rid = runCatching { android.provider.DocumentsContract.getDocumentId(u) }.getOrNull() ?: return false
-            return u.authority == auth && (rid == delId || rid.startsWith("$delId/"))
+            if (uri == docUri) return true
+            if (delId != null && auth != null) {
+                val u = android.net.Uri.parse(uri)
+                val rid = runCatching { android.provider.DocumentsContract.getDocumentId(u) }.getOrNull()
+                if (u.authority == auth && rid != null && (rid == delId || rid.startsWith("$delId/"))) {
+                    return true
+                }
+            }
+            return com.xnotes.core.util.DocKeys.within(documentKey(uri), delKey)
         }
-        if (currentUri?.let { matches(it) } == true) {
-            val deleted = state.document
+
+        fun matchesTab(tab: com.xnotes.canvas.NoteTabSession): Boolean {
+            return (tab.uri?.let { matches(it) } == true) ||
+                   (tab.autosaveUri?.let { matches(it) } == true) ||
+                   (tab.document.path?.let { matches(it) } == true)
+        }
+
+        // Immediately disarm autosave and clear paths on the calling thread so in-flight writes cannot resurrect the file
+        for (tab in tabManager.tabs) {
+            if (matchesTab(tab)) {
+                tab.autosaveUri = null
+                tab.document.path = null
+                tab.document.dirty = false
+            }
+        }
+        if (currentUri?.let { matches(it) } == true || (state.document.path?.let { matches(it) } == true)) {
             noteDebounceJob?.cancel()
             autosaveUri = null
-            deleted.path = null
-            deleted.dirty = false
+            state.document.path = null
+            state.document.dirty = false
             dirty = false
-            // Only reset to a fresh page if the deleted note is actually on screen; while on backstage
-            // (noteOpen == false) the detached buffer is left as-is so we don't pop into a blank editor.
-            autosaveScope.launch { if (state.document === deleted && noteOpen) newNote() }
+        }
+
+        // Close matching tab(s) on the main thread and update active tab / backstage state
+        autosaveScope.launch {
+            closeTabsMatching(::matchesTab, flushAutosave = false)
         }
     }
 
@@ -4503,6 +4534,14 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         if (newUri != null && state.document.path == sourceUri) {
             state.document.path = newUri.toString()
             if (autosaveUri == sourceUri) autosaveUri = newUri.toString()
+        }
+        if (newUri != null) {
+            tabManager.findTabByUri(sourceUri)?.let { tab ->
+                tab.uri = newUri.toString()
+                tab.autosaveUri = newUri.toString()
+                tab.document.path = newUri.toString()
+                persistTabs()
+            }
         }
         newUri?.let { onDocumentMoved(sourceUri, it.toString()); refreshBrowseTree() }
         newUri != null
@@ -5890,14 +5929,23 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         return moved
     }
 
-    fun closeTab(index: Int) {
+    fun closeTab(index: Int, flushAutosave: Boolean = true) {
         val tabToClose = tabManager.tabs.getOrNull(index) ?: return
-        // Flush autosave if dirty
-        if (tabToClose.isDirty && tabToClose.autosaveUri != null) {
+        // Flush autosave if dirty and allowed
+        if (flushAutosave && tabToClose.isDirty && tabToClose.autosaveUri != null) {
             val uri = tabToClose.autosaveUri!!
             val snap = tabToClose.document.snapshot()
             autosaveScope.launch(kotlinx.coroutines.NonCancellable + kotlinx.coroutines.Dispatchers.IO) {
                 startNoteWrite(uri, snap, tabToClose.document.displayName ?: tabToClose.document.title, System.nanoTime())
+            }
+        } else if (!flushAutosave) {
+            tabToClose.autosaveUri = null
+            tabToClose.document.path = null
+            tabToClose.document.dirty = false
+            if (state.document === tabToClose.document) {
+                noteDebounceJob?.cancel()
+                autosaveUri = null
+                dirty = false
             }
         }
         // Delete temp PDF if owned by this closing tab and no other open tab uses it
@@ -5907,13 +5955,35 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             autosaveScope.launch(kotlinx.coroutines.Dispatchers.IO) { pdf.delete() }
         }
 
+        val wasActive = (index == tabManager.activeIndex)
         tabManager.closeTab(index)
         persistTabs()
         if (tabManager.tabs.isEmpty()) {
+            newNote()
             noteOpen = false
-        } else {
+        } else if (wasActive) {
             tabManager.activeTab?.let { bindTabSession(it) }
         }
+    }
+
+    fun closeTabByUri(uri: String, flushAutosave: Boolean = true): Boolean {
+        val idx = tabManager.indexOfUri(uri)
+        return if (idx >= 0) {
+            closeTab(idx, flushAutosave = flushAutosave)
+            true
+        } else false
+    }
+
+    fun closeTabsMatching(predicate: (com.xnotes.canvas.NoteTabSession) -> Boolean, flushAutosave: Boolean = false): Int {
+        val matchingIndices = tabManager.tabs.indices.filter { predicate(tabManager.tabs[it]) }.reversed()
+        if (matchingIndices.isEmpty()) return 0
+        for (idx in matchingIndices) {
+            closeTab(idx, flushAutosave = flushAutosave)
+        }
+        if (tabManager.tabs.isNotEmpty() && tabManager.activeTab != null && state.document !== tabManager.activeTab!!.document) {
+            bindTabSession(tabManager.activeTab!!)
+        }
+        return matchingIndices.size
     }
 
     // --- tools & colour ---

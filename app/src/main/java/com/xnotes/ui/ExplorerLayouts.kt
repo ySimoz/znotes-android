@@ -315,10 +315,11 @@ internal fun ColumnsBody(
                                             modifier = Modifier.size(18.dp),
                                         )
                                         Text(b.label(e), color = fg, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                        if (!b.host.selecting()) {
+                                            EntryMenuButton(b, e, (if (sel) fg else palette.textDim.toComposeColor()), size = 28.dp)
+                                        }
                                         if (e.isDir) {
                                             Icon(XnotesIcons.next, null, tint = palette.textDim.toComposeColor(), modifier = Modifier.size(14.dp))
-                                        } else if (!b.host.selecting()) {
-                                            EntryMenuButton(b, e, (if (sel) fg else palette.textDim.toComposeColor()), size = 28.dp)
                                         }
                                     }
                                 }

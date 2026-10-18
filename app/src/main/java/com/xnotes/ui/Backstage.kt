@@ -2577,6 +2577,7 @@ private fun FolderTreeNode(
             name = entry.name, depth = depth, selected = currentDocId == docId, expanded = isExpanded,
             palette = palette, onSelect = { onOpenFolder(entry.documentUri) },
             onToggle = { expanded[docId] = !isExpanded }, dropTarget = dropTargetDocId == docId,
+            onMore = { onContextMenuChange(entry) },
         )
         DropdownMenu(
             expanded = contextMenuEntry?.documentUri == entry.documentUri,
@@ -2604,6 +2605,7 @@ private fun FolderTreeNode(
                 selected = false, expanded = false, palette = palette,
                 onSelect = { onOpenFile(child.documentUri) }, onToggle = {}, expandable = false,
                 rowIcon = if (child.name.endsWith(".xcanvas", true)) XnotesIcons.canvas else XnotesIcons.file,
+                onMore = { onContextMenuChange(child) },
             )
             DropdownMenu(
                 expanded = contextMenuEntry?.documentUri == child.documentUri,
@@ -2624,14 +2626,15 @@ private fun FolderTreeRow(
     name: String, depth: Int, selected: Boolean, expanded: Boolean,
     palette: com.xnotes.ui.theme.Palette, onSelect: () -> Unit, onToggle: () -> Unit,
     expandable: Boolean = true, rowIcon: ImageVector = XnotesIcons.folder, dropTarget: Boolean = false,
+    onMore: (() -> Unit)? = null,
 ) {
     Row(
-        Modifier.fillMaxWidth().padding(start = (8 + depth * 14).dp, end = 8.dp)
+        Modifier.fillMaxWidth().padding(start = (8 + depth * 14).dp, end = 4.dp)
             .clip(MaterialTheme.shapes.small)
             .background(when { dropTarget -> palette.accent.toComposeColor().copy(alpha = 0.20f); selected -> palette.selectionBackground.toComposeColor(); else -> Color.Transparent })
             .then(if (dropTarget) Modifier.border(1.dp, palette.accent.toComposeColor(), MaterialTheme.shapes.small) else Modifier)
             .clickable(role = Role.Button, onClick = onSelect)
-            .padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            .padding(start = 4.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (expandable) Icon(
@@ -2642,6 +2645,11 @@ private fun FolderTreeRow(
         Icon(rowIcon, null, tint = if (selected) palette.selectionForeground.toComposeColor() else palette.accent.toComposeColor(), modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
         Text(name, color = if (selected) palette.selectionForeground.toComposeColor() else palette.text.toComposeColor(), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        if (onMore != null) {
+            IconButton(onClick = onMore, modifier = Modifier.size(24.dp)) {
+                Icon(XnotesIcons.more, stringResource(R.string.more), tint = (if (selected) palette.selectionForeground else palette.textDim).toComposeColor(), modifier = Modifier.size(15.dp))
+            }
+        }
     }
 }
 

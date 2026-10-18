@@ -617,6 +617,7 @@ internal fun TimelineCard(b: ExplorerBody, e: BrowseEntry, side: Dp) {
 @Composable
 internal fun GalleryFolderChip(b: ExplorerBody, e: BrowseEntry) {
     val palette = LocalPalette.current
+    val selecting = b.host.selecting()
     val active = b.host.isSelected(e) || b.host.isDropTarget(e)
     val code = b.colorOf(e)?.let { codeTint(it, palette) }
     val shape = MaterialTheme.shapes.small
@@ -634,14 +635,18 @@ internal fun GalleryFolderChip(b: ExplorerBody, e: BrowseEntry) {
                 onClick = { b.host.onClick(e) },
                 onLongClick = { b.host.onLongClick(e) },
             )
-            .padding(start = 12.dp, end = 16.dp),
+            .padding(start = 12.dp, end = if (!selecting) 2.dp else 16.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         val fg = if (active) palette.selectionForeground.toComposeColor() else palette.text.toComposeColor()
         Icon(XnotesIcons.folder, null, tint = if (active) fg else (code ?: palette.textDim.toComposeColor()), modifier = Modifier.size(20.dp))
         Text(b.label(e), color = fg, fontSize = 14.sp, maxLines = 1)
         b.counts[e.documentUri]?.let { Text("$it", color = if (active) fg else palette.textDim.toComposeColor(), fontSize = 12.sp) }
+        if (b.host.isPinned(e)) Icon(XnotesIcons.pin, stringResource(R.string.pinned_to_sidebar), tint = if (active) fg else palette.textDim.toComposeColor(), modifier = Modifier.size(14.dp))
+        if (!selecting) {
+            EntryMenuButton(b, e, if (active) fg else palette.textDim.toComposeColor(), size = 28.dp)
+        }
     }
 }
 

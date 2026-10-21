@@ -4080,12 +4080,21 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         }
     }
 
+    /** Creates a `.xcanvas` under [parentDocId] with [background]; returns its URI, or null. IO — call off-thread. */
+    fun createCanvasFile(treeUri: String, parentDocId: String, rawName: String, background: com.xnotes.core.infinite.CanvasBackground): String? {
+        val name = uniqueDocumentName(treeUri, parentDocId, rawName, com.xnotes.core.util.DocumentKind.CANVAS)
+        val doc = com.xnotes.core.infinite.InfiniteDocument(created = System.currentTimeMillis()).apply {
+            this.background = background
+        }
+        return createNoteFile(treeUri, parentDocId, name) {
+            canvasCodec.write(doc, it)
+        }
+    }
+
     /** Creates a blank `.xcanvas` under [parentDocId]; returns its URI, or null. IO — call off-thread. */
     fun createBlankCanvasFile(treeUri: String, parentDocId: String, rawName: String): String? {
-        val name = uniqueDocumentName(treeUri, parentDocId, rawName, com.xnotes.core.util.DocumentKind.CANVAS)
-        return createNoteFile(treeUri, parentDocId, name) {
-            canvasCodec.write(com.xnotes.core.infinite.InfiniteDocument(created = System.currentTimeMillis()), it)
-        }
+        val bg = newCanvasBackground ?: com.xnotes.core.infinite.CanvasBackground()
+        return createCanvasFile(treeUri, parentDocId, rawName, bg)
     }
 
     /** Creates a blank `.xnote` under [parentDocId]; returns its URI, or null. IO — call off-thread. */

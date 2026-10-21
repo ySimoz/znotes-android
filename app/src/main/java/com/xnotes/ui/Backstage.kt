@@ -1881,21 +1881,45 @@ private fun ExplorerSection(
             onClose = { fieldError = null; onCreateMode(CreateMode.NONE) },
         )
     }
-    // Name entry for a new canvas, new folder, or a pending PDF import. Hidden while an import is
+    // A new canvas gets the full-screen New canvas; it opens once it is made.
+    if (createMode == CreateMode.CANVAS && pendingImport == null && !editor.importing) {
+        var busy by remember { mutableStateOf(false) }
+        NewCanvasScreen(
+            editor = editor,
+            folderName = stack.lastOrNull()?.second ?: rootName ?: stringResource(R.string.folder),
+            initialName = remember { nextUntitled(editor, editor.cachedChildren(root, currentDocId)) },
+            error = fieldError,
+            busy = busy,
+            onCreate = { n, background ->
+                busy = true
+                scope.launch {
+                    val uri = withContext(Dispatchers.IO) { editor.createCanvasFile(root, currentDocId, n, background) }
+                    busy = false
+                    if (uri != null) {
+                        fieldError = null
+                        onCreateMode(CreateMode.NONE)
+                        refreshKey++
+                        callsNow.value.openFile(uri)
+                    } else {
+                        fieldError = context.getString(R.string.err_create_canvas)
+                    }
+                }
+            },
+            onClose = { fieldError = null; onCreateMode(CreateMode.NONE) },
+        )
+    }
+    // Name entry for a new folder or a pending PDF import. Hidden while an import is
     // actually being written, so only the "Importing…" dialog shows.
-    if ((createMode == CreateMode.CANVAS || createMode == CreateMode.FOLDER || pendingImport != null) && !editor.importing) {
+    if ((createMode == CreateMode.FOLDER || pendingImport != null) && !editor.importing) {
         val isFolder = pendingImport == null && createMode == CreateMode.FOLDER
         val default = when {
             pendingImport != null -> pendingImport.defaultName // import names default to the source file
-            createMode == CreateMode.FILE || createMode == CreateMode.CANVAS ->
-                nextUntitled(editor, editor.cachedChildren(root, currentDocId))
             else -> "" // new folder
         }
         NameDialog(
             title = when {
                 pendingImport != null -> stringResource(R.string.import_title)
                 isFolder -> stringResource(R.string.new_folder)
-                createMode == CreateMode.CANVAS -> stringResource(R.string.new_canvas)
                 else -> stringResource(R.string.new_note)
             },
             initial = default,
@@ -1920,10 +1944,6 @@ private fun ExplorerSection(
                     isFolder -> scope.launch {
                         val ok = withContext(Dispatchers.IO) { editor.createFolder(root, currentDocId, n) }
                         if (ok) { onCreateMode(CreateMode.NONE); refreshKey++ } else fieldError = context.getString(R.string.err_create_folder)
-                    }
-                    createMode == CreateMode.CANVAS -> scope.launch {
-                        val uri = withContext(Dispatchers.IO) { editor.createBlankCanvasFile(root, currentDocId, n) }
-                        if (uri != null) { onCreateMode(CreateMode.NONE); refreshKey++ } else fieldError = context.getString(R.string.err_create_canvas)
                     }
                     else -> scope.launch {
                         // Just create the note in the explorer — it opens only when the user taps it.

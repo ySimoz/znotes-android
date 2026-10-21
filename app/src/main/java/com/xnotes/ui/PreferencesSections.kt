@@ -42,7 +42,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.xnotes.R
 import com.xnotes.core.model.Orientation
+import com.xnotes.core.model.PagePattern
 import com.xnotes.core.model.PageSize
+import com.xnotes.core.model.PageStyle
+import com.xnotes.core.model.PageTemplates
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.pal.FontFace
 import com.xnotes.core.tools.InkPalette
@@ -260,6 +263,88 @@ internal fun PagePreferencesSection(
     }
     CheckRow(stringResource(R.string.pref_page_colour_follows_theme), prefs.pageColor == null) {
         onUpdate(prefs.copy(pageColor = if (it) null else editor.swatches(com.xnotes.settings.SwatchRole.PAPER).first()))
+    }
+
+    val style = editor.newNoteStyle
+    val template = style.template ?: PagePattern.LINES.id
+    FieldLabel(stringResource(R.string.caption_template))
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Chip(stringResource(R.string.none), template == PageTemplates.NONE) {
+            editor.saveNewNoteStyle(style.copy(template = PageTemplates.NONE))
+        }
+        Chip(stringResource(R.string.pattern_lines), template == PagePattern.LINES.id) {
+            editor.saveNewNoteStyle(style.copy(template = PagePattern.LINES.id))
+        }
+        Chip(stringResource(R.string.pattern_dots), template == PagePattern.DOTS.id) {
+            editor.saveNewNoteStyle(style.copy(template = PagePattern.DOTS.id))
+        }
+        Chip(stringResource(R.string.pattern_grid), template == PagePattern.GRID.id) {
+            editor.saveNewNoteStyle(style.copy(template = PagePattern.GRID.id))
+        }
+    }
+    if (template != PageTemplates.NONE) {
+        FieldLabel(stringResource(R.string.caption_pattern_colour))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SwatchCircles(editor, com.xnotes.settings.SwatchRole.LINES, style.patternColor?.copy(a = 255)) {
+                editor.saveNewNoteStyle(style.copy(patternColor = it))
+            }
+        }
+        FieldLabel(stringResource(R.string.caption_accent_colour))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SwatchCircles(editor, com.xnotes.settings.SwatchRole.ACCENT, style.accentColor?.copy(a = 255)) {
+                editor.saveNewNoteStyle(style.copy(accentColor = it))
+            }
+        }
+    }
+}
+
+/**
+ * Canvas section: default pattern, spacing, pattern color and paper color.
+ */
+@Composable
+internal fun CanvasPreferencesSection(editor: Editor) {
+    val palette = LocalPalette.current
+    val currentBg = editor.newCanvasBackground ?: com.xnotes.core.infinite.CanvasBackground()
+    HorizontalDivider(color = palette.border.toComposeColor())
+    SectionTitle(stringResource(R.string.pref_canvas))
+    FieldLabel(stringResource(R.string.caption_pattern))
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Chip(stringResource(R.string.none), currentBg.pattern == PagePattern.NONE) {
+            editor.saveNewCanvasBackground(currentBg.copy(pattern = PagePattern.NONE))
+        }
+        Chip(stringResource(R.string.pattern_lines), currentBg.pattern == PagePattern.LINES) {
+            editor.saveNewCanvasBackground(currentBg.copy(pattern = PagePattern.LINES))
+        }
+        Chip(stringResource(R.string.pattern_dots), currentBg.pattern == PagePattern.DOTS) {
+            editor.saveNewCanvasBackground(currentBg.copy(pattern = PagePattern.DOTS))
+        }
+        Chip(stringResource(R.string.pattern_grid), currentBg.pattern == PagePattern.GRID) {
+            editor.saveNewCanvasBackground(currentBg.copy(pattern = PagePattern.GRID))
+        }
+    }
+    if (currentBg.pattern != PagePattern.NONE) {
+        FieldLabel(stringResource(R.string.caption_spacing))
+        Slider(
+            value = currentBg.clampedSpacing.toFloat(),
+            onValueChange = { editor.saveNewCanvasBackground(currentBg.copy(spacing = it.toDouble())) },
+            valueRange = PageStyle.MIN_SPACING.toFloat()..PageStyle.MAX_SPACING.toFloat(),
+            modifier = Modifier.width(280.dp),
+        )
+        FieldLabel(stringResource(R.string.caption_pattern_colour))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SwatchCircles(editor, com.xnotes.settings.SwatchRole.LINES, currentBg.patternColor.copy(a = 255)) {
+                editor.saveNewCanvasBackground(currentBg.copy(patternColor = it.copy(a = currentBg.patternColor.a)))
+            }
+        }
+    }
+    FieldLabel(stringResource(R.string.caption_paper))
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        SwatchCircles(editor, com.xnotes.settings.SwatchRole.PAPER, currentBg.paperColor) {
+            editor.saveNewCanvasBackground(currentBg.copy(paperColor = it))
+        }
+    }
+    CheckRow(stringResource(R.string.pref_page_colour_follows_theme), currentBg.paperColor == null) { followsTheme ->
+        editor.saveNewCanvasBackground(currentBg.copy(paperColor = if (followsTheme) null else editor.swatches(com.xnotes.settings.SwatchRole.PAPER).first()))
     }
 }
 

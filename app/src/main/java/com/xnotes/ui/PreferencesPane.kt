@@ -241,6 +241,7 @@ fun PreferencesPane(
                 onUpdate = ::update,
             )
             PagePreferencesSection(prefs = prefs, editor = editor, onUpdate = ::update)
+            CanvasPreferencesSection(editor = editor)
             ExplorerPreferencesSection(
                 prefs = prefs,
                 editor = editor,

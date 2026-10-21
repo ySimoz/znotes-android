@@ -357,6 +357,7 @@
     <string name="pref_hide_page_borders">隐藏页面边框</string>
     <string name="pref_page_colour">页面颜色</string>
     <string name="pref_page_colour_follows_theme">页面颜色跟随主题</string>
+    <string name="pref_canvas">无限画布</string>
     <string name="pref_pdf_export">PDF 导出</string>
     <string name="pref_pdf_heading_bookmarks">根据标题生成书签</string>
     <string name="pref_performance">性能</string>

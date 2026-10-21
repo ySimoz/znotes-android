@@ -75,6 +75,8 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.xnotes.R
 import com.xnotes.core.infinite.CanvasBackground
 import com.xnotes.core.model.PagePattern
@@ -102,177 +104,208 @@ internal fun NewCanvasScreen(
     onCreate: (String, CanvasBackground) -> Unit,
     onClose: () -> Unit,
 ) {
-    val palette = LocalPalette.current
-    val text = palette.text.toComposeColor()
-    val dim = palette.textDim.toComposeColor()
-    val accent = palette.accent.toComposeColor()
-    val border = palette.border.toComposeColor()
-
-    var name by remember { mutableStateOf(TextFieldValue(initialName, TextRange(initialName.length))) }
-    var selectedOnce by remember { mutableStateOf(false) }
-    var keepAllUntil by remember { mutableStateOf(0L) }
-    var nameFocused by remember { mutableStateOf(false) }
-    val focusManager = LocalFocusManager.current
-    val fieldBounds = remember { HashMap<String, androidx.compose.ui.geometry.Rect>() }
-
-    var background by remember {
-        mutableStateOf(editor.newCanvasBackground ?: CanvasBackground())
-    }
-    var saveAsDefault by remember { mutableStateOf(false) }
-
-    fun create() {
-        if (busy) return
-        if (saveAsDefault) {
-            editor.saveNewCanvasBackground(background)
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        MatchActivityWindow()
+        val palette = LocalPalette.current
+        val text = palette.text.toComposeColor()
+        val dim = palette.textDim.toComposeColor()
+        val accent = palette.accent.toComposeColor()
+        val border = palette.border.toComposeColor()
+    
+        var name by remember { mutableStateOf(TextFieldValue(initialName, TextRange(initialName.length))) }
+        var selectedOnce by remember { mutableStateOf(false) }
+        var keepAllUntil by remember { mutableStateOf(0L) }
+        var nameFocused by remember { mutableStateOf(false) }
+        val focusManager = LocalFocusManager.current
+        val fieldBounds = remember { HashMap<String, androidx.compose.ui.geometry.Rect>() }
+    
+        var background by remember {
+            mutableStateOf(editor.newCanvasBackground ?: CanvasBackground())
         }
-        onCreate(name.text, background)
-    }
-
-    val imeVisible = WindowInsets.isImeVisible
-    var imeWasVisible by remember { mutableStateOf(false) }
-    LaunchedEffect(imeVisible) {
-        if (imeVisible) {
-            imeWasVisible = true
-        } else if (imeWasVisible) {
-            focusManager.clearFocus()
-            imeWasVisible = false
+        var saveAsDefault by remember { mutableStateOf(false) }
+    
+        fun create() {
+            if (busy) return
+            if (saveAsDefault) {
+                editor.saveNewCanvasBackground(background)
+            }
+            onCreate(name.text, background)
         }
-    }
-
-    Scaffold(
-        containerColor = palette.surface.toComposeColor(),
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-    ) { inner ->
-        BoxWithConstraints(
-            Modifier
-                .fillMaxSize()
-                .padding(inner)
-                .pointerInput(Unit) {
-                    detectTapGestures { offset ->
-                        if (fieldBounds.values.none { it.contains(offset) }) {
-                            focusManager.clearFocus()
+    
+        val imeVisible = WindowInsets.isImeVisible
+        var imeWasVisible by remember { mutableStateOf(false) }
+        LaunchedEffect(imeVisible) {
+            if (imeVisible) {
+                imeWasVisible = true
+            } else if (imeWasVisible) {
+                focusManager.clearFocus()
+                imeWasVisible = false
+            }
+        }
+    
+        Scaffold(
+            containerColor = palette.surface.toComposeColor(),
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        ) { inner ->
+            BoxWithConstraints(
+                Modifier
+                    .fillMaxSize()
+                    .padding(inner)
+                    .pointerInput(Unit) {
+                        detectTapGestures { offset ->
+                            if (fieldBounds.values.none { it.contains(offset) }) {
+                                focusManager.clearFocus()
+                            }
                         }
-                    }
-                },
-        ) {
-            val screenW = maxWidth
-            val wide = screenW >= 640.dp
-            val nameStyle = TextStyle(color = text, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-
-            Column(Modifier.fillMaxSize()) {
-                // Top Bar
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(64.dp)
-                        .padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconButton(onClick = onClose) {
-                        Icon(XnotesIcons.close, stringResource(R.string.close_new_note), tint = text)
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            "$folderName / ${stringResource(R.string.new_canvas)}",
-                            color = dim,
-                            fontSize = 11.sp,
-                            maxLines = 1,
-                        )
-                        BasicTextField(
-                            value = name,
-                            onValueChange = { v ->
-                                val caretOnly = v.text == name.text
-                                name = if (caretOnly && android.os.SystemClock.uptimeMillis() < keepAllUntil) {
-                                    v.copy(selection = TextRange(0, v.text.length))
-                                } else v
-                            },
-                            singleLine = true,
-                            textStyle = nameStyle,
-                            cursorBrush = SolidColor(accent),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-                            decorationBox = { field ->
-                                Box {
-                                    if (name.text.isEmpty()) {
-                                        Text(initialName, style = nameStyle.copy(color = dim.copy(alpha = 0.5f)), maxLines = 1)
-                                    }
-                                    field()
-                                }
-                            },
-                            modifier = Modifier
-                                .widthIn(max = 480.dp)
-                                .fillMaxWidth()
-                                .onGloballyPositioned { fieldBounds["name"] = it.boundsInRoot() }
-                                .padding(vertical = 4.dp)
-                                .onFocusChanged {
-                                    nameFocused = it.isFocused
-                                    if (it.isFocused && !selectedOnce) {
-                                        selectedOnce = true
-                                        keepAllUntil = android.os.SystemClock.uptimeMillis() + 500
-                                        name = name.copy(selection = TextRange(0, name.text.length))
+                    },
+            ) {
+                val screenW = maxWidth
+                val wide = screenW >= 640.dp
+                val nameStyle = TextStyle(color = text, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+    
+                Column(Modifier.fillMaxSize()) {
+                    // Top Bar
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(64.dp)
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconButton(onClick = onClose) {
+                            Icon(XnotesIcons.close, stringResource(R.string.close_new_note), tint = text)
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "$folderName / ${stringResource(R.string.new_canvas)}",
+                                color = dim,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                            )
+                            BasicTextField(
+                                value = name,
+                                onValueChange = { v ->
+                                    val caretOnly = v.text == name.text
+                                    name = if (caretOnly && android.os.SystemClock.uptimeMillis() < keepAllUntil) {
+                                        v.copy(selection = TextRange(0, v.text.length))
+                                    } else v
+                                },
+                                singleLine = true,
+                                textStyle = nameStyle,
+                                cursorBrush = SolidColor(accent),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                                decorationBox = { field ->
+                                    Box {
+                                        if (name.text.isEmpty()) {
+                                            Text(initialName, style = nameStyle.copy(color = dim.copy(alpha = 0.5f)), maxLines = 1)
+                                        }
+                                        field()
                                     }
                                 },
-                        )
-                        Box(
-                            Modifier.widthIn(max = 480.dp).fillMaxWidth().height(if (nameFocused) 2.dp else 1.dp)
-                                .background(if (nameFocused) accent else dim.copy(alpha = 0.3f)),
-                        )
-                        if (error != null) {
-                            Text(error, color = palette.danger.toComposeColor(), fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+                                modifier = Modifier
+                                    .widthIn(max = 480.dp)
+                                    .fillMaxWidth()
+                                    .onGloballyPositioned { fieldBounds["name"] = it.boundsInRoot() }
+                                    .padding(vertical = 4.dp)
+                                    .onFocusChanged {
+                                        nameFocused = it.isFocused
+                                        if (it.isFocused && !selectedOnce) {
+                                            selectedOnce = true
+                                            keepAllUntil = android.os.SystemClock.uptimeMillis() + 500
+                                            name = name.copy(selection = TextRange(0, name.text.length))
+                                        }
+                                    },
+                            )
+                            Box(
+                                Modifier.widthIn(max = 480.dp).fillMaxWidth().height(if (nameFocused) 2.dp else 1.dp)
+                                    .background(if (nameFocused) accent else dim.copy(alpha = 0.3f)),
+                            )
+                            if (error != null) {
+                                Text(error, color = palette.danger.toComposeColor(), fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+                            }
+                        }
+                        Spacer(Modifier.width(16.dp))
+                        Button(
+                            onClick = { create() },
+                            enabled = !busy,
+                            colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = palette.onAccent.toComposeColor()),
+                        ) {
+                            if (busy) {
+                                CircularProgressIndicator(Modifier.size(18.dp), color = palette.onAccent.toComposeColor(), strokeWidth = 2.dp)
+                            } else {
+                                Icon(XnotesIcons.check, null, modifier = Modifier.size(18.dp))
+                            }
+                            Spacer(Modifier.size(8.dp))
+                            Text(stringResource(R.string.create), fontWeight = FontWeight.Medium)
                         }
                     }
-                    Spacer(Modifier.width(16.dp))
-                    Button(
-                        onClick = { create() },
-                        enabled = !busy,
-                        colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = palette.onAccent.toComposeColor()),
-                    ) {
-                        if (busy) {
-                            CircularProgressIndicator(Modifier.size(18.dp), color = palette.onAccent.toComposeColor(), strokeWidth = 2.dp)
-                        } else {
-                            Icon(XnotesIcons.check, null, modifier = Modifier.size(18.dp))
+    
+                    HorizontalDivider(color = border)
+    
+                    // Body content: side-by-side on wide screens, stacked on narrow
+                    if (wide) {
+                        val stageW = (screenW * 0.45f).coerceIn(340.dp, 560.dp)
+                        Row(Modifier.weight(1f).fillMaxWidth()) {
+                            // Left: Preview
+                            Box(
+                                Modifier
+                                    .width(stageW)
+                                    .fillMaxHeight()
+                                    .background(palette.bg.toComposeColor())
+                                    .padding(24.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CanvasBackgroundPreview(
+                                    background = background,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(340.dp)
+                                        .shadow(6.dp, RoundedCornerShape(12.dp))
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .border(1.5.dp, palette.paperBorder.toComposeColor(), RoundedCornerShape(12.dp)),
+                                )
+                            }
+    
+                            // Right: Controls
+                            val scroll = rememberScrollState()
+                            Column(
+                                Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .verticalScroll(scroll)
+                                    .padding(horizontal = 32.dp, vertical = 24.dp),
+                            ) {
+                                CanvasTuneControls(
+                                    editor = editor,
+                                    background = background,
+                                    saveAsDefault = saveAsDefault,
+                                    onSaveAsDefaultChange = { saveAsDefault = it },
+                                    onChange = { background = it },
+                                )
+                            }
                         }
-                        Spacer(Modifier.size(8.dp))
-                        Text(stringResource(R.string.create), fontWeight = FontWeight.Medium)
-                    }
-                }
-
-                HorizontalDivider(color = border)
-
-                // Body content: side-by-side on wide screens, stacked on narrow
-                if (wide) {
-                    val stageW = (screenW * 0.45f).coerceIn(340.dp, 560.dp)
-                    Row(Modifier.weight(1f).fillMaxWidth()) {
-                        // Left: Preview
-                        Box(
+                    } else {
+                        // Mobile: stacked column
+                        val scroll = rememberScrollState()
+                        Column(
                             Modifier
-                                .width(stageW)
-                                .fillMaxHeight()
-                                .background(palette.bg.toComposeColor())
-                                .padding(24.dp),
-                            contentAlignment = Alignment.Center,
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .verticalScroll(scroll)
+                                .padding(16.dp),
                         ) {
                             CanvasBackgroundPreview(
                                 background = background,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(340.dp)
-                                    .shadow(6.dp, RoundedCornerShape(12.dp))
+                                    .height(220.dp)
+                                    .shadow(4.dp, RoundedCornerShape(12.dp))
                                     .clip(RoundedCornerShape(12.dp))
                                     .border(1.5.dp, palette.paperBorder.toComposeColor(), RoundedCornerShape(12.dp)),
                             )
-                        }
-
-                        // Right: Controls
-                        val scroll = rememberScrollState()
-                        Column(
-                            Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .verticalScroll(scroll)
-                                .padding(horizontal = 32.dp, vertical = 24.dp),
-                        ) {
+                            Spacer(Modifier.height(20.dp))
                             CanvasTuneControls(
                                 editor = editor,
                                 background = background,
@@ -281,34 +314,6 @@ internal fun NewCanvasScreen(
                                 onChange = { background = it },
                             )
                         }
-                    }
-                } else {
-                    // Mobile: stacked column
-                    val scroll = rememberScrollState()
-                    Column(
-                        Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                            .verticalScroll(scroll)
-                            .padding(16.dp),
-                    ) {
-                        CanvasBackgroundPreview(
-                            background = background,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(220.dp)
-                                .shadow(4.dp, RoundedCornerShape(12.dp))
-                                .clip(RoundedCornerShape(12.dp))
-                                .border(1.5.dp, palette.paperBorder.toComposeColor(), RoundedCornerShape(12.dp)),
-                        )
-                        Spacer(Modifier.height(20.dp))
-                        CanvasTuneControls(
-                            editor = editor,
-                            background = background,
-                            saveAsDefault = saveAsDefault,
-                            onSaveAsDefaultChange = { saveAsDefault = it },
-                            onChange = { background = it },
-                        )
                     }
                 }
             }

@@ -143,7 +143,7 @@ import kotlin.math.roundToInt
  * hides them, and no resizing when the keyboard comes and goes, so neither flashes a bar or jumps.
  */
 @Composable
-private fun MatchActivityWindow() {
+internal fun MatchActivityWindow() {
     val view = LocalView.current
     val context = LocalContext.current
     DisposableEffect(view) {

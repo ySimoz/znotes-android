@@ -64,7 +64,6 @@ import com.xnotes.core.template.TemplatePage
 import com.xnotes.core.template.TemplatePainter
 import com.xnotes.core.template.TemplateValues
 import com.xnotes.platform.AndroidRenderer
-import com.xnotes.platform.CustomAssetFolders
 import com.xnotes.platform.TemplateLibrary
 import com.xnotes.platform.ThumbnailDecoder
 import com.xnotes.ui.theme.LocalPalette
@@ -180,210 +179,6 @@ internal fun TemplateStrip(
     }
 }
 
-/** Edit values for a template inside the note-creation dialog (omits scope toggles). */
-@Composable
-internal fun CreationTemplateSettings(
-    entry: TemplateLibrary.Entry?,
-    style: PageStyle,
-    pageMm: Pair<Double, Double>,
-    ink: Rgba,
-    accent: Rgba,
-    paper: Rgba,
-    onChange: (PageStyle) -> Unit,
-) {
-    if (entry == null) return
-    val template = entry.template
-    if (template.params.isEmpty()) return
-    val palette = LocalPalette.current
-    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(stringResource(R.string.create_template_settings), color = palette.textDim.toComposeColor(), fontSize = 12.sp)
-        TemplateParamControls(
-            template, style, lower = null,
-            dpi = com.xnotes.core.model.PageSize.DEFAULT_DPI,
-            apply = onChange,
-        )
-    }
-}
-
-/** Confirmation dialog shown when long-pressing an asset to remove it from library. */
-@Composable
-private fun CustomImageDeleteDialog(
-    entry: CustomAssetFolders.CustomImage,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.delete_confirm_title)) },
-        text = { Text(stringResource(R.string.create_delete_asset_confirm, CustomAssetFolders.displayName(entry.name))) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) { Text(stringResource(R.string.delete)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-        },
-    )
-}
-
-/** Clears the active custom image selection. */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun CustomImageClearTile(thumbH: Dp, paper: Rgba, onClear: () -> Unit) {
-    val palette = LocalPalette.current
-    Column(
-        Modifier.width(TILE_W).clip(MaterialTheme.shapes.extraSmall).combinedClickable(onClick = onClear).padding(vertical = 3.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(
-            Modifier.size(THUMB_W, thumbH)
-                .border(1.dp, palette.accent.toComposeColor(), RoundedCornerShape(3.dp))
-                .background(paper.toComposeColor(), RoundedCornerShape(3.dp)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("×", color = palette.textDim.toComposeColor(), fontSize = 20.sp)
-        }
-        Spacer(Modifier.height(3.dp))
-        Text(stringResource(R.string.none), color = palette.text.toComposeColor(), fontSize = 9.sp, maxLines = 1)
-    }
-}
-
-/** Tile triggering custom image import from file picker. */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun CustomImageImportTile(thumbH: Dp, onImport: () -> Unit) {
-    val palette = LocalPalette.current
-    Column(
-        Modifier.width(TILE_W).clip(MaterialTheme.shapes.extraSmall).combinedClickable(onClick = onImport).padding(vertical = 3.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(
-            Modifier.size(THUMB_W, thumbH)
-                .border(1.dp, palette.border.toComposeColor(), RoundedCornerShape(3.dp))
-                .background(palette.surface.toComposeColor(), RoundedCornerShape(3.dp)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("+", color = palette.textDim.toComposeColor(), fontSize = 20.sp)
-        }
-        Spacer(Modifier.height(3.dp))
-        Text(stringResource(R.string.create_import_image), color = palette.text.toComposeColor(), fontSize = 9.sp, maxLines = 1)
-    }
-}
-
-/** A single custom image thumbnail tile rendered asynchronously to preserve 144Hz frame pacing. */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun CustomImageTile(
-    entry: CustomAssetFolders.CustomImage,
-    selected: Boolean,
-    thumbH: Dp,
-    paper: Rgba,
-    onSelect: () -> Unit,
-    onLongClick: () -> Unit,
-) {
-    val palette = LocalPalette.current
-    val context = LocalContext.current
-    val bitmap by produceState<ImageBitmap?>(initialValue = null, key1 = entry.id) {
-        val bmp = withContext(Dispatchers.IO) {
-            CustomAssetFolders.decodeThumbnail(context, entry, 128, 128)
-        }
-        value = bmp?.asImageBitmap()
-    }
-    Column(
-        Modifier.width(TILE_W).clip(MaterialTheme.shapes.extraSmall)
-            .combinedClickable(onClick = onSelect, onLongClick = onLongClick)
-            .padding(vertical = 3.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(
-            Modifier.size(THUMB_W, thumbH)
-                .border(
-                    if (selected) 2.dp else 1.dp,
-                    (if (selected) palette.accent else palette.border).toComposeColor(),
-                    RoundedCornerShape(3.dp),
-                )
-                .padding(if (selected) 2.dp else 1.dp),
-        ) {
-            val currentBmp = bitmap
-            if (currentBmp != null) {
-                Image(
-                    currentBmp,
-                    contentDescription = entry.name,
-                    modifier = Modifier.size(THUMB_W, thumbH),
-                    contentScale = ContentScale.Crop,
-                )
-            } else {
-                Box(Modifier.size(THUMB_W, thumbH).background(paper.toComposeColor()), contentAlignment = Alignment.Center) {
-                    Text("…", color = palette.textDim.toComposeColor())
-                }
-            }
-        }
-    }
-}
-
-/** Image-backed custom page/cover patterns, rendered as page-shaped thumbnails like template presets. */
-@Composable
-internal fun CustomImageStrip(
-    images: List<CustomAssetFolders.CustomImage>,
-    selectedBytes: ByteArray?,
-    pageMm: Pair<Double, Double>,
-    paper: Rgba,
-    onSelect: (ByteArray) -> Unit,
-    onImport: () -> Unit,
-    onClear: () -> Unit,
-    onDelete: (CustomAssetFolders.CustomImage) -> Unit,
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var pendingDelete by remember { mutableStateOf<CustomAssetFolders.CustomImage?>(null) }
-    pendingDelete?.let { entry ->
-        CustomImageDeleteDialog(
-            entry = entry,
-            onConfirm = {
-                pendingDelete = null
-                onDelete(entry)
-            },
-            onDismiss = { pendingDelete = null },
-        )
-    }
-    val aspect = (pageMm.second / pageMm.first).coerceIn(0.5, 2.0)
-    val thumbH = THUMB_W * aspect.toFloat()
-
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (selectedBytes != null) {
-            item(key = "clear_custom_image") {
-                CustomImageClearTile(thumbH, paper, onClear)
-            }
-        }
-        items(images, key = { it.id }) { entry ->
-            val selected by produceState(initialValue = false, key1 = selectedBytes, key2 = entry.id) {
-                value = if (selectedBytes == null) false else {
-                    withContext(Dispatchers.IO) {
-                        val file = entry.file
-                        if (file != null && file.length() != selectedBytes.size.toLong()) false
-                        else entry.readBytes(context).contentEquals(selectedBytes)
-                    }
-                }
-            }
-            CustomImageTile(
-                entry = entry,
-                selected = selected,
-                thumbH = thumbH,
-                paper = paper,
-                onSelect = {
-                    scope.launch {
-                        val bytes = withContext(Dispatchers.IO) { entry.readBytes(context) }
-                        if (bytes.isNotEmpty()) onSelect(bytes)
-                    }
-                },
-                onLongClick = { pendingDelete = entry },
-            )
-        }
-        item(key = "import_custom_image") {
-            CustomImageImportTile(thumbH, onImport)
-        }
-    }
-}
-
 /** [t] with [values] set, as it lands on the whole page, [width] wide and outlined like a thumbnail. */
 @Composable
 internal fun TemplatePreview(
@@ -404,11 +199,11 @@ internal fun TemplatePreview(
 }
 
 @Composable
-private fun thumbPx(width: Dp): Int = with(LocalDensity.current) { width.toPx() }.toInt().coerceAtLeast(8)
+internal fun thumbPx(width: Dp): Int = with(LocalDensity.current) { width.toPx() }.toInt().coerceAtLeast(8)
 
 /** [spec] drawn off the main thread, straight from [TemplateThumbs] when it is there already. */
 @Composable
-private fun rememberTemplateThumb(t: Template, spec: TemplateThumbs.Spec, keep: Boolean): ImageBitmap? {
+internal fun rememberTemplateThumb(t: Template, spec: TemplateThumbs.Spec, keep: Boolean): ImageBitmap? {
     val state = produceState(if (keep) TemplateThumbs.cached(spec) else null, spec) {
         value = (if (keep) TemplateThumbs.cached(spec) else null) ?: withContext(Dispatchers.Default) { TemplateThumbs.render(t, spec, keep) }
     }
@@ -485,11 +280,7 @@ internal object TemplateThumbs {
             c.drawColor(s.paper.toArgb())
             val values = TemplateValues(s.numbers, s.colors)
             val out = TemplateLibrary.layouts.layout(t, TemplatePage(w, h, Rect(0.0, 0.0, w, h), s.ink, s.accent, values))
-            val scale = s.wPx / w
-            TemplatePainter.paint(
-                AndroidRenderer(c), legiblePreview(out, scale), scale,
-                Rect(0.0, 0.0, s.wPx.toDouble(), hPx.toDouble()),
-            )
+            TemplatePainter.paint(AndroidRenderer(c), out, s.wPx / w, Rect(0.0, 0.0, s.wPx.toDouble(), hPx.toDouble()), minLine = 1.0, picture = TemplateLibrary.pictures(null, s.key))
             bmp.asImageBitmap()
         }.getOrNull() ?: return null
         if (keep) synchronized(cache) { cache[s] = img }

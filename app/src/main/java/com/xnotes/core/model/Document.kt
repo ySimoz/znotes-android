@@ -48,6 +48,13 @@ class Document(
      * draws the same on any device. Built-in rulings are never here. Replaced whole, never mutated.
      */
     var templates: Map<String, String> = emptyMap(),
+    /**
+     * The packaged templates (zips holding pictures) this note's styles name, by key, as files on
+     * disk so their pictures never sit in the heap. Like [templates], replaced whole.
+     */
+    var templatePackages: Map<String, java.io.File> = emptyMap(),
+    /** The size of each page added from now on, or null to give it the size of the page before it. */
+    var newPageSize: PageSizeChoice? = null,
 ) {
     /** Transient: set by the codec when legacy ink was compacted at load (debug overlay readout). */
     var compactedOnLoad = false
@@ -73,6 +80,12 @@ class Document(
         dirty = true
         return page
     }
+
+    /** The size of a blank page added after [previous]: [newPageSize] if set, else [previous]'s, else A4 portrait. */
+    fun blankPageSize(previous: Page?): Pair<Double, Double> =
+        newPageSize?.pixels(dpi)
+            ?: previous?.let { it.width to it.height }
+            ?: PageSize.A4.pixels(Orientation.PORTRAIT, dpi)
 
     /**
      * Moves the page at [fromIndex] to [toIndex] and marks the document dirty.

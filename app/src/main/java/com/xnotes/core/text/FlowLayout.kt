@@ -469,8 +469,18 @@ class FlowLayout(private val measurer: TextMeasurer, private val math: MathTypes
      * when it continues onto a page of different width, and count how many
      * virtual pages the tail overflowed past the real ones. Past [throughPage]
      * it stops, for a caller painting only that far: nothing later is shaped.
+     * The flow starts on [firstPage], so a note's cover takes none of it.
+     * The virtual pages are [addedPage], the box a page added now would get,
+     * else the last page's.
      */
-    fun layout(flow: TextFlow, pageBoxes: List<PageBox>, dpi: Int, throughPage: Int = Int.MAX_VALUE): FlowFrame {
+    fun layout(
+        flow: TextFlow,
+        pageBoxes: List<PageBox>,
+        dpi: Int,
+        throughPage: Int = Int.MAX_VALUE,
+        firstPage: Int = 0,
+        addedPage: PageBox? = null,
+    ): FlowFrame {
         val defColor = flow.defaultColor ?: autoColor() ?: TextFlow.DEFAULT_COLOR
         val cells = CellIndex(flow.paragraphs)
         if (pageBoxes.isEmpty()) return FlowFrame(emptyList(), flow.rev, 0, defColor, codeBackground(), cells)
@@ -478,10 +488,11 @@ class FlowLayout(private val measurer: TextMeasurer, private val math: MathTypes
         math?.beginLayout()
         pruneCaches(flow)
         val contentRects = pageBoxes.map { contentRectOf(it, flow.margins, dpi) }
+        val spare = addedPage?.let { contentRectOf(it, flow.margins, dpi) } ?: contentRects.last()
         val pageLines = List(pageBoxes.size) { mutableListOf<PlacedLine>() }
         val pageTables = List(pageBoxes.size) { mutableListOf<TableFrag>() }
-        var page = 0
-        var y = contentRects[0].top
+        var page = firstPage.coerceIn(0, pageBoxes.lastIndex)
+        var y = contentRects[page].top
         var ordinal = 0
         var skipTo = 0
         for ((paraIndex, para) in flow.paragraphs.withIndex()) {
@@ -490,7 +501,7 @@ class FlowLayout(private val measurer: TextMeasurer, private val math: MathTypes
             val block = cells.blockAt(paraIndex)
             if (block != null) {
                 val cur = Cursor(page, y)
-                layoutTable(flow, block, contentRects, cur, pageLines, pageTables)
+                layoutTable(flow, block, contentRects, spare, cur, pageLines, pageTables)
                 page = cur.page
                 y = cur.y
                 ordinal = 0
@@ -500,7 +511,7 @@ class FlowLayout(private val measurer: TextMeasurer, private val math: MathTypes
             ordinal = if (para.list == ListKind.ORDERED) ordinal + 1 else 0
             val indentPx = para.indent * INDENT_STEP_PX +
                 if (para.list != ListKind.NONE) MARKER_GUTTER_PX else 0.0
-            var rect = contentRects.getOrElse(page) { contentRects.last() }
+            var rect = contentRects.getOrElse(page) { spare }
             var avail = (rect.w - indentPx).coerceAtLeast(MIN_LINE_WIDTH)
             var lines = breakLines(flow, para, avail)
             var li = 0
@@ -509,7 +520,7 @@ class FlowLayout(private val measurer: TextMeasurer, private val math: MathTypes
                 val bl = lines[li]
                 if (y + bl.height > rect.bottom + EPS && y > rect.top + EPS) {
                     page++
-                    rect = contentRects.getOrElse(page) { contentRects.last() }
+                    rect = contentRects.getOrElse(page) { spare }
                     y = rect.top
                     val widthNow = (rect.w - indentPx).coerceAtLeast(MIN_LINE_WIDTH)
                     if (widthNow != avail) {
@@ -533,7 +544,7 @@ class FlowLayout(private val measurer: TextMeasurer, private val math: MathTypes
         }
         val extra = (page - (pageBoxes.size - 1)).coerceAtLeast(0)
         val pages = pageBoxes.indices.map { PageFlow(contentRects[it], pageLines[it], pageTables[it]) }
-        return FlowFrame(pages, flow.rev, extra, defColor, codeBackground(), cells)
+        return FlowFrame(pages, flow.rev, extra, defColor, codeBackground(), cells, firstPage.coerceIn(0, pageBoxes.lastIndex))
     }
 
     private class Cursor(var page: Int, var y: Double)
@@ -552,6 +563,7 @@ class FlowLayout(private val measurer: TextMeasurer, private val math: MathTypes
         flow: TextFlow,
         block: TableBlock,
         contentRects: List<Rect>,
+        spare: Rect,
         cur: Cursor,
         pageLines: List<MutableList<PlacedLine>>,
         pageTables: List<MutableList<TableFrag>>,
@@ -564,7 +576,7 @@ class FlowLayout(private val measurer: TextMeasurer, private val math: MathTypes
         val widths = FlowTable.normalized(table.widths).takeIf { it.size == cols } ?: FlowTable.even(cols)
         val frac = FlowTable.clampWidth(table.width)
         val tint = style.tint ?: accentColor() ?: DEFAULT_TINT
-        fun rectAt(p: Int) = contentRects.getOrElse(p) { contentRects.last() }
+        fun rectAt(p: Int) = contentRects.getOrElse(p) { spare }
         var rect = rectAt(cur.page)
         var colXs = colEdges(rect, widths, frac)
         val rowsHere = mutableListOf<RowFrag>()

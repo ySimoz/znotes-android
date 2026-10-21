@@ -46,6 +46,15 @@ class FlowPaginationTest {
     }
 
     @Test
+    fun overflowIsCountedInPagesOfTheAddedSize() {
+        // Added pages half as tall hold one line each, not three.
+        val flow = flowOf(*Array(8) { "" })
+        val frame = layout.layout(flow, pages(1), 150, addedPage = PageBox(100.0, 25.0))
+        assertEquals(3, frame.pages[0].lines.size)
+        assertEquals(5, frame.extraPagesNeeded)
+    }
+
+    @Test
     fun continuationRebreaksAtTheNextPageWidth() {
         val flow = flowOf("aaaa bbbb cccc dddd eeee")
         val boxes = listOf(PageBox(100.0, 16.0), PageBox(60.0, 100.0))
@@ -258,5 +267,19 @@ class FlowPaginationTest {
         assertEquals(listOf(3, 3, 2), frame.pages.map { it.lines.size })
         assertEquals(0, frame.extraPagesNeeded)
     }
+    @Test
+    fun aFlowStartingPastTheCoverLeavesItEmpty() {
+        val frame = layout.layout(flowOf(*Array(5) { "" }), pages(3), 150, firstPage = 1)
+        assertEquals(listOf(0, 3, 2), frame.pages.map { it.lines.size })
+        assertEquals(0, frame.extraPagesNeeded)
+        assertEquals(1, frame.firstPage)
+    }
 
+    @Test
+    fun anEmptyFlowPastTheCoverFillsFromItsFirstPage() {
+        val frame = layout.layout(TextFlow().apply { margins = FlowMargins(0.0, 0.0, 0.0, 0.0) }, pages(3), 150, firstPage = 1)
+        // A tap two lines down page 1 needs two lines before the caret's, none for the cover.
+        assertEquals(3, frame.emptyLinesToReach(1, 2 * 15.6 + 1.0, 15.6))
+        assertEquals(0, frame.emptyLinesToReach(0, 40.0, 15.6))
+    }
 }

@@ -84,14 +84,12 @@ import com.xnotes.settings.CornerStyle
 import com.xnotes.settings.ToolbarPosition
 import com.xnotes.settings.ToolbarSize
 import com.xnotes.settings.MaterialColourMode
+import com.xnotes.settings.SwatchRole
 import com.xnotes.ui.icons.XnotesIcons
 import com.xnotes.ui.theme.LocalPalette
 import com.xnotes.ui.theme.toComposeColor
 import kotlinx.coroutines.delay
 
-internal val pageColorPresets = listOf(
-    Rgba(22, 22, 22), Rgba(13, 13, 13), Rgba(255, 255, 255), Rgba(247, 243, 233), Rgba(232, 232, 232),
-)
 /** One-tap filename templates offered beside the free-text field. */
 internal val NAME_TEMPLATE_PRESETS = listOf(
     NameTemplate.DEFAULT,
@@ -242,7 +240,7 @@ fun PreferencesPane(
                 stemPreview = "${editor.newNoteStem(emptySet())}.xnote",
                 onUpdate = ::update,
             )
-            PagePreferencesSection(prefs = prefs, onUpdate = ::update)
+            PagePreferencesSection(prefs = prefs, editor = editor, onUpdate = ::update)
             ExplorerPreferencesSection(
                 prefs = prefs,
                 editor = editor,
@@ -534,6 +532,33 @@ internal fun ColorPickerDot(
     }
 }
 
+/** Where each [SwatchRole]'s circles are kept: the settings file, shared by every row of that role. */
+interface SwatchStore {
+    fun swatches(role: SwatchRole): List<Rgba>
+    fun setSwatch(role: SwatchRole, index: Int, color: Rgba)
+}
+
+/**
+ * A role's five colour circles. A tap applies one; a tap on the one already [selected] opens the
+ * picker and recolours that circle, as the toolbar's pen swatches do. Emits the circles straight
+ * into the caller's row, so a Default chip can sit before them.
+ */
+@Composable
+internal fun SwatchCircles(store: SwatchStore, role: SwatchRole, selected: Rgba?, onPick: (Rgba) -> Unit) {
+    var swatches by remember(role) { mutableStateOf(store.swatches(role)) }
+    var editing by remember { mutableStateOf<Int?>(null) }
+    swatches.forEachIndexed { i, c ->
+        Box {
+            ColorDot(c.toComposeColor(), selected == c) { if (selected == c) editing = i else onPick(c) }
+            if (editing == i) PageColorGridPopup(c, onDismiss = { editing = null }) { picked ->
+                swatches = swatches.toMutableList().also { it[i] = picked }
+                store.setSwatch(role, i, picked)
+                onPick(picked)
+            }
+        }
+    }
+}
+
 /** One tappable colour cell in a picker grid. */
 /**
  * The colour-code picker shown inside a note/folder's overflow menu: a None row to clear the colour,
@@ -590,9 +615,7 @@ internal fun MillimetreField(label: String, value: Double, onChange: (Double) ->
         value = text,
         onValueChange = { raw ->
             text = raw
-            raw.trim().toDoubleOrNull()?.let {
-                if (it in Preferences.CUSTOM_PAGE_MIN_MM..Preferences.CUSTOM_PAGE_MAX_MM) onChange(it)
-            }
+            parseMm(raw)?.let(onChange)
         },
         singleLine = true,
         label = { Text(label, fontSize = 12.sp) },
@@ -601,31 +624,6 @@ internal fun MillimetreField(label: String, value: Double, onChange: (Double) ->
     )
 }
 
-/** Drop a whole number's ".0" so the field reads "210", not "210.0". */
-private fun formatMm(v: Double): String =
-    if (v == Math.floor(v) && !v.isInfinite()) v.toInt().toString() else v.toString()
-
-@Composable
-internal fun SizeDropdown(size: PageSize, onSelect: (PageSize) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    val palette = LocalPalette.current
-    Box {
-        Box(
-            Modifier
-                .clip(MaterialTheme.shapes.small)
-                .border(1.dp, palette.border.toComposeColor(), MaterialTheme.shapes.small)
-                .clickable { expanded = true }
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-        ) {
-            Text(pageSizeLabel(size), color = palette.text.toComposeColor(), fontSize = 14.sp)
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            PageSize.entries.forEach { s ->
-                DropdownMenuItem(text = { Text(pageSizeLabel(s)) }, onClick = { onSelect(s); expanded = false })
-            }
-        }
-    }
-}
 
 @Composable
 internal fun OptionDropdown(options: List<Pair<String, String>>, selectedId: String, onSelect: (String) -> Unit) {

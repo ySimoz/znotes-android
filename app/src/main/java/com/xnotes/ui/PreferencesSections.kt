@@ -216,13 +216,14 @@ internal fun NewNotesPreferencesSection(
 @Composable
 internal fun PagePreferencesSection(
     prefs: Preferences,
+    editor: Editor,
     onUpdate: (Preferences) -> Unit,
 ) {
     val palette = LocalPalette.current
     HorizontalDivider(color = palette.border.toComposeColor())
     SectionTitle(stringResource(R.string.pref_page))
     FieldLabel(stringResource(R.string.pref_default_page_size))
-    SizeDropdown(prefs.defaultPageSize) { onUpdate(prefs.copy(defaultPageSize = it)) }
+    SizeDropdown(prefs.defaultPageSize) { it?.let { size -> onUpdate(prefs.copy(defaultPageSize = size)) } }
     if (prefs.defaultPageSize == PageSize.CUSTOM) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             MillimetreField(stringResource(R.string.width_mm), prefs.customPageWidthMm) {
@@ -255,18 +256,10 @@ internal fun PagePreferencesSection(
     )
     FieldLabel(stringResource(R.string.pref_page_colour))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        pageColorPresets.forEach { c ->
-            ColorDot(c.toComposeColor(), prefs.pageColor == c) { onUpdate(prefs.copy(pageColor = c)) }
-        }
-        ColorPickerDot(
-            prefs.pageColor,
-            custom = prefs.pageColor != null && prefs.pageColor !in pageColorPresets,
-            onPick = { onUpdate(prefs.copy(pageColor = it)) },
-            dismissOnPick = false,
-        ) { onDismiss, onPick -> PageColorGridPopup(prefs.pageColor, onDismiss, onPick) }
+        SwatchCircles(editor, com.xnotes.settings.SwatchRole.PAPER, prefs.pageColor) { onUpdate(prefs.copy(pageColor = it)) }
     }
     CheckRow(stringResource(R.string.pref_page_colour_follows_theme), prefs.pageColor == null) {
-        onUpdate(prefs.copy(pageColor = if (it) null else pageColorPresets.first()))
+        onUpdate(prefs.copy(pageColor = if (it) null else editor.swatches(com.xnotes.settings.SwatchRole.PAPER).first()))
     }
 }
 

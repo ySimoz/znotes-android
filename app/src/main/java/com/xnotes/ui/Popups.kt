@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -42,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.PopupProperties
@@ -50,8 +52,11 @@ import com.xnotes.canvas.PdfColorFilter
 import com.xnotes.canvas.ViewOverrides
 import com.xnotes.canvas.ViewSettings
 import com.xnotes.canvas.ViewingMode
+import com.xnotes.core.model.Orientation
 import com.xnotes.core.model.PageEdge
 import com.xnotes.core.model.PageMargins
+import com.xnotes.core.model.PageSize
+import com.xnotes.core.model.PageSizeChoice
 import com.xnotes.core.model.PagePattern
 import com.xnotes.core.model.PageTemplates
 import com.xnotes.core.model.PageStyle
@@ -67,6 +72,7 @@ import com.xnotes.core.tools.ToolConfig
 import com.xnotes.core.tools.ToolConversions
 import com.xnotes.platform.FontCatalog
 import com.xnotes.settings.Preferences
+import com.xnotes.settings.SwatchRole
 import com.xnotes.ui.icons.XnotesIcons
 import com.xnotes.ui.theme.LocalPalette
 import com.xnotes.ui.theme.toComposeColor
@@ -201,7 +207,7 @@ fun ToolConfigPopup(editor: ToolPopupHost, tool: Tool, onDismiss: () -> Unit) {
  * own, with its colours and parameters. Like [ToolConfigPopup], the popup holds the edited style
  * locally and pushes each change to the [Editor] (which persists, but never undoes). The All Pages
  * tab also offers making its style the default stamped onto new notes, plus a Reset back to
- * all-Default.
+ * all-Default. Below both tabs sits the note's new page size, which neither tab nor Reset touches.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -247,15 +253,7 @@ fun StylesPopup(editor: Editor, onImportTemplate: () -> Unit = {}, onDismiss: ()
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 ModeChip(stringResource(R.string.default_choice), style.pageColor == null) { apply(style.copy(pageColor = null)) }
-                pageColorPresets.forEach { c ->
-                    ColorDot(c.toComposeColor(), style.pageColor == c) { apply(style.copy(pageColor = c)) }
-                }
-                ColorPickerDot(
-                    style.pageColor,
-                    custom = style.pageColor != null && style.pageColor !in pageColorPresets,
-                    onPick = { apply(style.copy(pageColor = it)) },
-                    dismissOnPick = false,
-                ) { d, p -> PageColorGridPopup(style.pageColor, d, p) }
+                SwatchCircles(editor, SwatchRole.PAPER, style.pageColor) { apply(style.copy(pageColor = it)) }
             }
 
             Spacer(Modifier.size(12.dp))
@@ -271,7 +269,11 @@ fun StylesPopup(editor: Editor, onImportTemplate: () -> Unit = {}, onDismiss: ()
             }
             Spacer(Modifier.size(6.dp))
             val libraryVersion = TemplateLibraryUi.version
-            val choices = remember(libraryVersion, tab) { editor.templateChoices() }
+            // On the cover, its own tab lists cover designs instead of page templates.
+            val coverPage = tab == 1 && editor.currentPageIsCover
+            val choices = remember(libraryVersion, tab, coverPage) {
+                editor.templateChoices(if (coverPage) com.xnotes.core.template.TemplateKind.COVER else com.xnotes.core.template.TemplateKind.PAGE)
+            }
             TemplateStrip(
                 entries = choices,
                 selected = style.template,
@@ -323,6 +325,70 @@ fun StylesPopup(editor: Editor, onImportTemplate: () -> Unit = {}, onDismiss: ()
                     ModeChip(stringResource(R.string.reset), false) { apply(PageStyle()) }
                 }
             }
+
+            HorizontalDivider(Modifier.padding(vertical = 12.dp), color = LocalPalette.current.border.toComposeColor())
+            NewPageSizeControls(editor)
+        }
+    }
+}
+
+/** The size of pages added to the note: the page before's, a named size turned either way, or Custom's sides. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun NewPageSizeControls(editor: Editor) {
+    var choice by remember { mutableStateOf(editor.newPageSize) }
+    fun apply(next: PageSizeChoice?) {
+        choice = next
+        editor.setNewPageSize(next)
+    }
+
+    StyleCaption(stringResource(R.string.caption_new_page_size))
+    Spacer(Modifier.size(6.dp))
+    // A first pick starts from the Preferences size, so Custom opens on the sides typed there.
+    SizeDropdown(choice?.size, stringResource(R.string.same_as_previous)) { size ->
+        apply(size?.let { (choice ?: editor.preferences.defaultPageChoice).copy(size = it) })
+    }
+    val c = choice
+    if (c != null) {
+        Spacer(Modifier.size(8.dp))
+        if (c.size == PageSize.CUSTOM) {
+            // The fields keep the callback they were built with, so it reads the choice as it is now.
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SideField(stringResource(R.string.width_mm), c.customWidthMm, Modifier.weight(1f)) { mm ->
+                    choice?.let { apply(it.copy(customWidthMm = mm)) }
+                }
+                SideField(stringResource(R.string.height_mm), c.customHeightMm, Modifier.weight(1f)) { mm ->
+                    choice?.let { apply(it.copy(customHeightMm = mm)) }
+                }
+            }
+        } else {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                ModeChip(stringResource(R.string.orientation_portrait), c.orientation == Orientation.PORTRAIT) {
+                    apply(c.copy(orientation = Orientation.PORTRAIT))
+                }
+                ModeChip(stringResource(R.string.orientation_landscape), c.orientation == Orientation.LANDSCAPE) {
+                    apply(c.copy(orientation = Orientation.LANDSCAPE))
+                }
+            }
+        }
+    }
+}
+
+/** One side of a custom page in millimetres; only a value inside the settable range reaches [onChange]. */
+@Composable
+private fun SideField(label: String, mm: Double, modifier: Modifier, onChange: (Double) -> Unit) {
+    Column(modifier) {
+        StyleCaption(label)
+        Spacer(Modifier.size(4.dp))
+        FieldFrame(Modifier.fillMaxWidth()) {
+            NativeField(
+                value = formatMm(mm),
+                onText = { raw -> parseMm(raw)?.let(onChange) },
+                modifier = Modifier.weight(1f),
+                decimal = true,
+                maxLen = 7,
+                endAlign = true,
+            )
         }
     }
 }
@@ -382,44 +448,41 @@ private fun TemplateCustomizer(
             )
         }
 
-        Spacer(Modifier.size(12.dp))
-        StyleCaption(stringResource(R.string.caption_pattern_colour))
-        Spacer(Modifier.size(4.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            ModeChip(stringResource(R.string.default_choice), style.patternColor == null) { apply(style.copy(patternColor = null)) }
-            ColorPickerDot(
-                style.patternColor?.copy(a = 255), // show the hue at full strength; OPACITY sets the alpha
-                custom = style.patternColor != null,
-                onPick = { apply(style.copy(patternColor = it.copy(a = look.ink.a))) }, // keep current opacity
-                dismissOnPick = false,
-            ) { d, p -> PageColorGridPopup(style.patternColor?.copy(a = 255), d, p) }
+        if (t.usesInk) {
+            Spacer(Modifier.size(12.dp))
+            StyleCaption(stringResource(R.string.caption_pattern_colour))
+            Spacer(Modifier.size(4.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                ModeChip(stringResource(R.string.default_choice), style.patternColor == null) { apply(style.copy(patternColor = null)) }
+                // Circles hold the hue at full strength; OPACITY sets the alpha, so a pick keeps it.
+                SwatchCircles(editor, SwatchRole.LINES, style.patternColor?.copy(a = 255)) {
+                    apply(style.copy(patternColor = it.copy(a = look.ink.a)))
+                }
+            }
+            Spacer(Modifier.size(12.dp))
+            val opacityPct = look.ink.a * 100f / 255f
+            StyleCaption(stringResource(R.string.caption_opacity_percent, opacityPct.roundToInt()))
+            Slider(
+                value = opacityPct,
+                onValueChange = { pct ->
+                    apply(style.copy(patternColor = look.ink.copy(a = (pct / 100f * 255f).roundToInt().coerceIn(0, 255))))
+                },
+                valueRange = 0f..100f,
+            )
         }
-        Spacer(Modifier.size(12.dp))
-        val opacityPct = look.ink.a * 100f / 255f
-        StyleCaption(stringResource(R.string.caption_opacity_percent, opacityPct.roundToInt()))
-        Slider(
-            value = opacityPct,
-            onValueChange = { pct ->
-                apply(style.copy(patternColor = look.ink.copy(a = (pct / 100f * 255f).roundToInt().coerceIn(0, 255))))
-            },
-            valueRange = 0f..100f,
-        )
         if (t.usesAccent) {
             Spacer(Modifier.size(4.dp))
             StyleCaption(stringResource(R.string.caption_accent_colour))
             Spacer(Modifier.size(4.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 ModeChip(stringResource(R.string.default_choice), style.accentColor == null) { apply(style.copy(accentColor = null)) }
-                ColorPickerDot(
-                    style.accentColor?.copy(a = 255),
-                    custom = style.accentColor != null,
-                    onPick = { apply(style.copy(accentColor = it.copy(a = look.accent.a))) },
-                    dismissOnPick = false,
-                ) { d, p -> PageColorGridPopup(style.accentColor?.copy(a = 255), d, p) }
+                SwatchCircles(editor, SwatchRole.ACCENT, style.accentColor?.copy(a = 255)) {
+                    apply(style.copy(accentColor = it.copy(a = look.accent.a)))
+                }
             }
         }
 
-        TemplateParamControls(t, style, lower, dpi, apply)
+        TemplateParamControls(t, style, lower, dpi, editor, apply = apply)
 
         Spacer(Modifier.size(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -501,6 +564,7 @@ fun MarginsPopup(editor: Editor, onDismiss: () -> Unit) {
  * Controls for [t]'s parameters on a page-style level: the spacing parameter on the classic
  * spacing slider (content px), the others as sliders or colour pickers, each with a Default chip
  * that falls back to [lower] (the level below, when its values apply) and then the template.
+ * [captionGap] spaces a colour row's caption from its circles, as the host's own rows do.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -509,6 +573,8 @@ internal fun TemplateParamControls(
     style: PageStyle,
     lower: PageStyle?,
     dpi: Int,
+    store: SwatchStore,
+    captionGap: Dp = 0.dp,
     apply: (PageStyle) -> Unit,
 ) {
     val k = dpi / 25.4
@@ -517,7 +583,9 @@ internal fun TemplateParamControls(
         val lo = ((sp.min ?: (sp.default / 4)) * k).toFloat()
         val hi = ((sp.max ?: (sp.default * 4)) * k).toFloat().coerceAtLeast(lo + 1f)
         val spacing = style.spacing ?: lower?.spacing ?: (sp.default * k)
-        StyleCaption(stringResource(R.string.caption_spacing_px, spacing.roundToInt()) + if (style.spacing == null) stringResource(R.string.default_suffix) else "")
+        // In mm under the template's own name for it, like every other length.
+        val label = sp.label ?: stringResource(R.string.caption_spacing)
+        StyleCaption("$label  ${"%.1f mm".format(spacing / k)}" + if (style.spacing == null) stringResource(R.string.default_suffix) else "")
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ModeChip(stringResource(R.string.default_choice), style.spacing == null) { apply(style.copy(spacing = null)) }
             Slider(
@@ -535,16 +603,14 @@ internal fun TemplateParamControls(
         if (p.type == com.xnotes.core.template.ParamType.COLOR) {
             val own = style.colors?.get(p.name)
             StyleCaption(label)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Spacer(Modifier.size(captionGap))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 ModeChip(stringResource(R.string.default_choice), own == null) {
                     apply(style.copy(colors = style.colors?.minus(p.name)?.takeIf { it.isNotEmpty() }))
                 }
-                ColorPickerDot(
-                    own,
-                    custom = own != null,
-                    onPick = { apply(style.copy(colors = (style.colors ?: emptyMap()) + (p.name to it))) },
-                    dismissOnPick = false,
-                ) { d, pick -> PageColorGridPopup(own, d, pick) }
+                SwatchCircles(store, SwatchRole.TEMPLATE, own) {
+                    apply(style.copy(colors = (style.colors ?: emptyMap()) + (p.name to it)))
+                }
             }
             continue
         }

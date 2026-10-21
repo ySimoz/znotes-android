@@ -41,6 +41,7 @@ import com.xnotes.core.model.MarkupType
 import com.xnotes.core.model.Orientation
 import com.xnotes.core.model.Page
 import com.xnotes.core.model.PageMargins
+import com.xnotes.core.model.PageSizeChoice
 import com.xnotes.core.model.PagePattern
 import com.xnotes.core.model.PageSize
 import com.xnotes.core.model.PageStyle
@@ -106,6 +107,7 @@ import com.xnotes.platform.AndroidTextMeasurer
 import com.xnotes.core.pal.TextMeasurer
 import com.xnotes.settings.ExplorerView
 import com.xnotes.settings.LiveSettings
+import com.xnotes.settings.SwatchRole
 import com.xnotes.settings.Preferences
 import com.xnotes.settings.CornerStyle
 import com.xnotes.settings.ToolbarLook
@@ -191,6 +193,9 @@ private const val COLOR_NAMES_FILE = "color-names.json"
 private const val TRASH_DIR = "trash"
 private const val TRASH_INFO = "trash.json"
 
+/** Inside the top folder's sidecar: the template library, made on the first import. */
+private const val TEMPLATES_DIR = "templates"
+
 /** How long after a tap its settings change is written, clear of the 150 ms animations it starts. */
 private const val SETTINGS_SAVE_DELAY_MS = 400L
 
@@ -235,68 +240,8 @@ private val sharedRecents = androidx.compose.runtime.mutableStateOf<List<com.xno
  */
 enum class Pane { PRIMARY, SECONDARY }
 
-/**
- * Options specified when creating a new note from the note creation dialog.
- */
-data class NoteCreationOptions(
-    val pageSize: PageSize,
-    val orientation: Orientation,
-    val pageStyle: PageStyle,
-    val includeCover: Boolean,
-    val coverStyle: PageStyle,
-    /** Optional encoded image to place behind the title on the first page. */
-    val coverImageBytes: ByteArray? = null,
-    /** Optional image used as the background paper on every page. */
-    val pageImageBytes: ByteArray? = null,
-    /** Custom page width in mm if pageSize is CUSTOM. */
-    val customWidthMm: Double? = null,
-    /** Custom page height in mm if pageSize is CUSTOM. */
-    val customHeightMm: Double? = null,
-)
-
-/** Populates a blank document with the style, templates, background images, and cover from [options]. */
-internal fun populateBlankDocument(
-    blank: Document,
-    title: String,
-    options: NoteCreationOptions,
-    pageImageData: ImageData? = null,
-    coverImageData: ImageData? = null,
-    textMeasurer: TextMeasurer,
-) {
-    blank.style = options.pageStyle
-    TemplateLibrary.embed(blank, options.pageStyle.template)
-    if (pageImageData != null) {
-        blank.pages.forEachIndexed { index, page ->
-            if (!(options.includeCover && index == 0)) {
-                page.items.add(0, ImageItem(pageImageData, Rect(0.0, 0.0, page.width, page.height)).apply { locked = true })
-            }
-        }
-    }
-    if (options.includeCover && blank.pages.isNotEmpty()) {
-        val cover = blank.pages.first()
-        cover.style = options.coverStyle
-        TemplateLibrary.embed(blank, options.coverStyle.template)
-        if (coverImageData != null) {
-            cover.items.add(ImageItem(coverImageData, Rect(0.0, 0.0, cover.width, cover.height)).apply { locked = true })
-        }
-        val paper = options.coverStyle.pageColor
-        val ink = if (paper != null && paper.luminance() < 0.42) Rgba(250, 250, 250) else Rgba(35, 39, 48)
-        cover.items.add(
-            TextItem(
-                pos = Pt(cover.width * 0.10, cover.height * 0.34),
-                width = cover.width * 0.80,
-                text = title.ifBlank { "Untitled" },
-                rgba = ink,
-                pointSize = 32.0,
-                face = FontFace.SANS,
-                measurer = textMeasurer,
-            ),
-        )
-    }
-}
-
 @Stable
-class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, SelectionMenuHost, LongPressMenuHost, TextEditHost {
+class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, SelectionMenuHost, LongPressMenuHost, TextEditHost, SwatchStore {
 
     private val appContext = context.applicationContext
 
@@ -662,6 +607,22 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         message = text
     }
 
+    /** Windows over the main screen that show [message] themselves, such as New note, which would hide it. */
+    var messageHosts by mutableStateOf(0)
+
+    /** Show [message] on [host], then clear it; its action, when it has one, runs if tapped. */
+    suspend fun showMessage(host: androidx.compose.material3.SnackbarHostState) {
+        val text = message ?: return
+        val action = messageAction
+        messageAction = null
+        val result = host.showSnackbar(
+            text, actionLabel = action?.first,
+            duration = if (action != null) androidx.compose.material3.SnackbarDuration.Long else androidx.compose.material3.SnackbarDuration.Short,
+        )
+        if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) action?.second?.invoke()
+        message = null
+    }
+
     /** How many items wait in Trash in the current folder tree. */
     var trashCount by mutableStateOf(0)
         private set
@@ -747,6 +708,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             // The new-canvas background lives in the settings file this editor owns.
             it.newCanvasBackground = newCanvasBackground
             it.onSaveNewCanvasBackground = { bg -> saveNewCanvasBackground(bg) }
+            it.swatchStore = this
             it.onColorRemembered = { color ->
                 settings = settings.rememberColor(color)
                 it.recentColors = recentColors
@@ -1596,6 +1558,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
 
     init {
         com.xnotes.platform.MathRendering.addListener(mathLanded)
+        if (pane == Pane.PRIMARY) reloadTemplateLibrary()
         view.input = { ev ->
             // Any fresh canvas touch quietly retires the flow action bar and still does its job.
             when (ev.actionMasked) {
@@ -2051,7 +2014,11 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         val doc = state.document
         val oldFlow = publishedFlow
         val oldPages = publishedPageList
-        val frame = flowLayout.layout(doc.flow, doc.pages.map { PageBox(it.width, it.height) }, doc.dpi)
+        val (addedW, addedH) = doc.blankPageSize(doc.pages.lastOrNull())
+        val frame = flowLayout.layout(
+            doc.flow, doc.pages.map { PageBox(it.width, it.height) }, doc.dpi,
+            firstPage = flowStart(doc), addedPage = PageBox(addedW, addedH),
+        )
         // What this frame actually shows, not what the caller meant it to: an edit
         // republishes before it moves the caret, so a frame can be laid out against
         // a caret the edit has already invalidated. Recording the intent instead
@@ -2264,7 +2231,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     private fun flowExportHooks(doc: Document): com.xnotes.platform.PdfExporter.FlowExport {
         if (doc.flow.isEmpty) return com.xnotes.platform.PdfExporter.FlowExport.NONE
         val frame = themedFlowLayout(doc.flow)
-            .layout(doc.flow, doc.pages.map { PageBox(it.width, it.height) }, doc.dpi)
+            .layout(doc.flow, doc.pages.map { PageBox(it.width, it.height) }, doc.dpi, firstPage = flowStart(doc))
         val index = HashMap<Page, Int>(doc.pages.size * 2)
         doc.pages.forEachIndexed { i, p -> index[p] = i }
         return com.xnotes.platform.PdfExporter.FlowExport(doc.flow, frame) { index[it] }
@@ -2777,13 +2744,6 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     var newNoteStyle by mutableStateOf(settings.newNoteStyle)
         private set
 
-    /** Transient image chosen in the note-creation dialog; embedded into the new note on creation. */
-    var noteCreationCoverImageBytes by mutableStateOf<ByteArray?>(null)
-    var noteCreationPageImageBytes by mutableStateOf<ByteArray?>(null)
-
-    /** Refresh custom cover/page image strips after an import completes. */
-    fun customAssetsChanged() { TemplateLibraryUi.version++ }
-
     /** Save (or, passing an empty style, forget) the All Pages style new notes start with. */
     fun saveNewNoteStyle(style: PageStyle) {
         if (newNoteStyle == style) return
@@ -2818,34 +2778,27 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         settingsRepo.save(settings)
     }
 
-    /** A blank document at a chosen page size, falling back to the user's defaults. */
-    private fun blankDocument(
-        pageSize: PageSize? = null,
-        orientation: Orientation? = null,
-        count: Int = Document.DEFAULT_NEW_PAGES,
-        customWidthMm: Double? = null,
-        customHeightMm: Double? = null,
-    ): Document {
-        val prefs = settings.prefs
-        val chosenSize = pageSize ?: prefs.defaultPageSize
-        val chosenOrientation = orientation ?: prefs.defaultPageOrientation
-        val (w, h) = if (chosenSize == PageSize.CUSTOM) {
-            val widthMm = customWidthMm ?: prefs.customPageWidthMm
-            val heightMm = customHeightMm ?: prefs.customPageHeightMm
-            val a = PageSize.mmToPx(widthMm, PageSize.DEFAULT_DPI)
-            val b = PageSize.mmToPx(heightMm, PageSize.DEFAULT_DPI)
-            if (chosenOrientation == Orientation.LANDSCAPE) maxOf(a, b) to minOf(a, b) else minOf(a, b) to maxOf(a, b)
-        } else chosenSize.pixels(chosenOrientation, PageSize.DEFAULT_DPI)
-        return Document.blankPixels(count, w, h).also { it.created = System.currentTimeMillis() }
+    override fun swatches(role: SwatchRole): List<Rgba> = settings.swatchesFor(role)
+
+    /** Recolour one circle; notes keep the colours they already use. */
+    override fun setSwatch(role: SwatchRole, index: Int, color: Rgba) {
+        settings = settings.withSwatch(role, index, color)
+        saveSettingsSoon()
+    }
+
+    /** A blank document at the user's default page size, custom dimensions included. */
+    private fun blankDocument(): Document {
+        val (w, h) = settings.prefs.newPagePixels()
+        return Document.blankPixels(Document.DEFAULT_NEW_PAGES, w, h).also { it.created = System.currentTimeMillis() }
     }
 
     /** Stamp the saved new-note defaults (page style + flow config) onto a fresh [doc]. */
     private fun stampNewNoteDefaults(doc: Document): Document {
         doc.style = settings.newNoteStyle
-        TemplateLibrary.embed(doc, doc.style.template)
+        TemplateLibrary.embed(doc, doc.style.template, imageDir)
         // A default whose template left the library falls back to the built-in ruling.
         doc.style.template?.let { key ->
-            if (key != PageTemplates.NONE && !PageTemplates.isBuiltIn(key) && key !in doc.templates) {
+            if (key != PageTemplates.NONE && !PageTemplates.isBuiltIn(key) && key !in doc.templates && key !in doc.templatePackages) {
                 doc.style = doc.style.withTemplate(null, PageTemplates.NONE)
             }
         }
@@ -2857,7 +2810,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     fun setDocumentStyle(style: PageStyle) {
         val prev = state.document.style
         if (prev == style) return
-        TemplateLibrary.embed(state.document, style.template)
+        TemplateLibrary.embed(state.document, style.template, imageDir)
         state.document.style = style
         applyStyleChange(prev, style, state.document.pages.toList())
     }
@@ -2867,7 +2820,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         val page = state.document.pages.getOrNull(state.currentPageIndex()) ?: return
         val prev = page.style
         if (prev == style) return
-        TemplateLibrary.embed(state.document, style.template)
+        TemplateLibrary.embed(state.document, style.template, imageDir)
         page.style = style
         applyStyleChange(prev, style, listOf(page))
     }
@@ -2907,6 +2860,17 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         state.document.dirty = true
         refreshContent()
         view.requestRender()
+    }
+
+    /** The size pages added to the note take, or null when each takes the size of the page before it. */
+    val newPageSize: PageSizeChoice? get() = state.document.newPageSize
+
+    /** Replace [newPageSize]; saved with the note but, like a style change, not an undo step. */
+    fun setNewPageSize(size: PageSizeChoice?) {
+        if (state.document.newPageSize == size) return
+        state.document.newPageSize = size
+        state.document.dirty = true
+        refreshContent()
     }
 
     /**
@@ -3549,6 +3513,8 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         val r = surface.renderer()
         r.scale(scale, scale)
         r.translate(-cover.left, -cover.top)
+        // Only a cover shows its design on a tile; ruled first pages stay as they always were.
+        if (page.cover) TemplateLibrary.paint(r, doc, page, cover, cover)
         doc.pdfFile?.let { file ->
             runCatching {
                 com.xnotes.platform.PdfSource.create(file)?.let { src ->
@@ -3571,7 +3537,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         // and only as far as this page, so a tile never sets the formulas further on.
         if (!doc.flow.isEmpty) {
             val frame = themedFlowLayout(doc.flow)
-                .layout(doc.flow, doc.pages.map { PageBox(it.width, it.height) }, doc.dpi, throughPage = index)
+                .layout(doc.flow, doc.pages.map { PageBox(it.width, it.height) }, doc.dpi, throughPage = index, firstPage = flowStart(doc))
             FlowPainter.paintPage(r, frame, index, Rect(0.0, 0.0, page.width, page.height))
         }
         for (item in itemsSnapshot(page)) item.paint(r)
@@ -3780,6 +3746,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         for (page in doc.pages) for (item in page.items) {
             if (item is ImageItem) runCatching { item.image.file.delete() }
         }
+        for (file in doc.templatePackages.values) runCatching { file.delete() }
     }
 
     /** [deleteImageTemps] for a canvas, whose items are one flat list rather than per page. */
@@ -3833,12 +3800,11 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     fun updateBrowseRoot(treeUri: String) {
         colorNames = emptyMap()
         browseRoot = treeUri
-        TemplateLibrary.configureStorageTree(treeUri)
-        TemplateLibraryUi.version++
         settings = settings.copy(browseRoot = treeUri)
         settingsRepo.save(settings)
         browseCache.clear()
         rootNameCache.clear()
+        reloadTemplateLibrary()
     }
 
     /** Browse the app's own private storage instead of a granted folder; no SAF grant needed. */
@@ -4123,54 +4089,32 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     }
 
     /** Creates a blank `.xnote` under [parentDocId]; returns its URI, or null. IO — call off-thread. */
-    fun createBlankNoteFile(
-        treeUri: String,
-        parentDocId: String,
-        rawName: String,
-        options: NoteCreationOptions? = null,
-    ): String? {
+    fun createBlankNoteFile(treeUri: String, parentDocId: String, rawName: String): String? {
         val name = uniqueDocumentName(treeUri, parentDocId, rawName, com.xnotes.core.util.DocumentKind.NOTE)
-        val blank = if (options == null) blankDocument() else {
-            blankDocument(
-                options.pageSize,
-                options.orientation,
-                if (options.includeCover) 2 else 1,
-                options.customWidthMm,
-                options.customHeightMm,
-            )
-        }
-        stampNewNoteDefaults(blank)
-        if (options != null) {
-            val pageImageData = options.pageImageBytes?.let { bytes ->
-                val file = runCatching {
-                    java.io.File.createTempFile("paper", null, imageDir).apply { writeBytes(bytes) }
-                }.getOrNull()
-                val size = file?.let { imageCodec.probeFile(it.path) }
-                if (file != null && size != null && size.width > 0 && size.height > 0) {
-                    ImageData(file, size.width, size.height)
-                } else {
-                    file?.delete()
-                    null
-                }
-            }
-            val coverImageData = if (options.includeCover) {
-                options.coverImageBytes?.let { bytes ->
-                    val file = runCatching {
-                        java.io.File.createTempFile("cover", null, imageDir).apply { writeBytes(bytes) }
-                    }.getOrNull()
-                    val size = file?.let { imageCodec.probeFile(it.path) }
-                    if (file != null && size != null && size.width > 0 && size.height > 0) {
-                        ImageData(file, size.width, size.height)
-                    } else {
-                        file?.delete()
-                        null
-                    }
-                }
-            } else null
-            val title = com.xnotes.core.util.DocumentKind.stripSuffix(name)
-            populateBlankDocument(blank, title, options, pageImageData, coverImageData, textMeasurer)
-        }
+        val blank = blankDocument().also { stampNewNoteDefaults(it) }
         return createNoteFile(treeUri, parentDocId, name) { codec.write(blank, it) }
+    }
+
+    /** What the New note screen chose: the page size in mm, every page's style, and the cover's when there is one. */
+    class NewNoteSetup(val widthMm: Double, val heightMm: Double, val style: PageStyle, val cover: PageStyle?)
+
+    /** Creates a `.xnote` under [parentDocId] as [setup] describes, a cover first when it has one; returns its URI, or null. IO. */
+    fun createNoteFile(treeUri: String, parentDocId: String, rawName: String, setup: NewNoteSetup): String? {
+        val name = uniqueDocumentName(treeUri, parentDocId, rawName, com.xnotes.core.util.DocumentKind.NOTE)
+        val dpi = PageSize.DEFAULT_DPI
+        val w = PageSize.mmToPx(setup.widthMm, dpi)
+        val h = PageSize.mmToPx(setup.heightMm, dpi)
+        val doc = Document.blankPixels(Document.DEFAULT_NEW_PAGES, w, h, dpi).also { it.created = System.currentTimeMillis() }
+        doc.style = setup.style
+        TemplateLibrary.embed(doc, setup.style.template, imageDir)
+        (settings.newNoteFlow ?: factoryFlow).applyTo(doc.flow)
+        setup.cover?.let { style ->
+            // The cover's design runs to the paper's edge, whatever margins the pages get later.
+            val cover = Page(w, h, style = style, margins = PageMargins(0.0, 0.0, 0.0, 0.0)).also { it.cover = true }
+            TemplateLibrary.embed(doc, style.template, imageDir)
+            doc.pages.add(0, cover)
+        }
+        return createNoteFile(treeUri, parentDocId, name) { codec.write(doc, it) }
     }
 
     /** Imports the PDF at [pdfFile] into a new `.xnote` under [parentDocId] (named after [rawName]);
@@ -4868,9 +4812,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
      */
     private fun writeNoteInPlace(uri: String, doc: Document): Boolean = runCatching {
         val assets = codec.imageAssets(doc)
-        val expected = ArrayList<Pair<String, Long>>(assets.size + 1)
-        for ((name, file) in assets) expected.add(name to file.length())
-        doc.pdfFile?.let { expected.add("assets/source.pdf" to it.length()) }
+        val expected = codec.storedEntries(doc, assets).map { (name, file) -> name to file.length() }
         if (expected.isEmpty()) return@runCatching false
 
         val target = android.net.Uri.parse(uri)
@@ -6359,15 +6301,18 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
 
     // --- pages ---
 
+    /** The page typed text starts on: past the cover, when the note has one. */
+    private fun flowStart(doc: Document): Int = if (doc.pages.size > 1 && doc.pages[0].cover) 1 else 0
+
     /**
-     * Insert a blank page at [index] (clamped into range), sized from the page at [refIndex] so the
-     * note stays uniform (falling back to A4 portrait). Undoable; relayouts and refreshes. Returns
-     * the new page's final index.
+     * Insert a blank page at [index] (clamped into range), at the note's new page size or else the
+     * size of the page at [refIndex]. Undoable; relayouts and refreshes. Returns the new page's
+     * final index.
      */
     private fun insertBlankPageAt(index: Int, refIndex: Int): Int {
         val pages = state.document.pages
         val ref = pages.getOrNull(refIndex) ?: pages.getOrNull(index) ?: pages.lastOrNull()
-        val (w, h) = if (ref != null) ref.width to ref.height else PageSize.A4.pixels(Orientation.PORTRAIT, state.document.dpi)
+        val (w, h) = state.document.blankPageSize(ref)
         val at = index.coerceIn(0, pages.size)
         val page = Page(w, h)
         controller.clearSelection() // inserting shifts later page indices; drop any stale item selection
@@ -6381,6 +6326,53 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         refreshContent()
         view.requestRender()
         return at
+    }
+
+    // --- the cover: always the first page, marked so, and only ever added, restyled or removed ---
+
+    /** Whether the note starts with a cover. */
+    val hasCover: Boolean get() = state.document.pages.firstOrNull()?.cover == true
+
+    /** The cover's style, null without one. */
+    val coverStyle: PageStyle? get() = state.document.pages.firstOrNull()?.takeIf { it.cover }?.style
+
+    /** Whether the page in view is the cover. */
+    val currentPageIsCover: Boolean get() = state.document.pages.getOrNull(state.currentPageIndex())?.cover == true
+
+    /** The first page's size in mm, which a cover takes. */
+    val firstPageMm: Pair<Double, Double>
+        get() {
+            val p = state.document.pages.firstOrNull() ?: return 210.0 to 297.0
+            val k = 25.4 / state.document.dpi
+            return p.width * k to p.height * k
+        }
+
+    /** Give the note a cover of [style], or restyle the one it has. Adding one is undoable like adding a page. */
+    fun setCover(style: PageStyle) {
+        val pages = state.document.pages
+        TemplateLibrary.embed(state.document, style.template, imageDir)
+        val current = pages.firstOrNull()?.takeIf { it.cover }
+        if (current != null) {
+            val prev = current.style
+            if (prev == style) return
+            current.style = style
+            applyStyleChange(prev, style, listOf(current))
+            return
+        }
+        val ref = pages.firstOrNull()
+        val (w, h) = if (ref != null) ref.width to ref.height else PageSize.A4.pixels(Orientation.PORTRAIT, state.document.dpi)
+        // The cover's design runs to the paper's edge, whatever margins the pages have.
+        val page = Page(w, h, style = style, margins = PageMargins(0.0, 0.0, 0.0, 0.0)).also { it.cover = true }
+        controller.clearSelection()
+        pages.add(0, page)
+        history.push(AddPage(state.document, page, 0))
+        afterPageEdit()
+        goToPage(0)
+    }
+
+    /** Take the cover away, as deleting its page would. */
+    fun removeCover() {
+        if (hasCover) deletePages(listOf(0))
     }
 
     /** Common tail for a side-panel page edit: re-layout, refresh the chrome, repaint. */
@@ -6654,6 +6646,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         sub.pages.addAll(pages) // share the page objects; export only reads them
         sub.style = state.document.style // carry the note's "all pages" style into the subset export
         sub.templates = state.document.templates
+        sub.templatePackages = state.document.templatePackages
         // A private source per export, see [exportPdf]. The shared PDF file is read-only and owned
         // by the open document, so closing src won't delete it.
         val src = sub.pdfFile?.let { com.xnotes.platform.PdfSource.create(it) }
@@ -7458,48 +7451,172 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         fontsChanged()
     }
 
-    /** Adopt [bytes] as a user page template, reporting the outcome as a message. */
-    fun importTemplate(bytes: ByteArray) {
-        if (bytes.size > com.xnotes.format.TemplateReader.MAX_BYTES) {
-            message = appContext.getString(R.string.err_import_template, appContext.getString(R.string.template_too_large))
-            return
-        }
-        val isPng = bytes.size >= 8 && bytes[0] == 0x89.toByte() && bytes[1] == 0x50.toByte() && bytes[2] == 0x4E.toByte() && bytes[3] == 0x47.toByte()
-        val isJpg = bytes.size >= 3 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte() && bytes[2] == 0xFF.toByte()
-        val isWebp = bytes.size >= 12 && bytes[0] == 'R'.code.toByte() && bytes[8] == 'W'.code.toByte() && bytes[9] == 'E'.code.toByte() && bytes[10] == 'B'.code.toByte() && bytes[11] == 'P'.code.toByte()
-        if (isPng || isJpg || isWebp) {
-            message = appContext.getString(R.string.err_template_is_image)
-            return
-        }
-        runCatching { TemplateLibrary.import(String(bytes, Charsets.UTF_8)) }
-            .onSuccess {
-                message = appContext.getString(R.string.template_imported, it.template.name)
-                TemplateLibraryUi.version++
+    /** Adopt the template file at [uri], plain or packaged, reporting the outcome as a message. */
+    fun importTemplate(uri: android.net.Uri) {
+        val name = runCatching {
+            appContext.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+        }.getOrNull()?.let { com.xnotes.core.util.Paths.stem(it) }
+        adoptTemplate {
+            val tmp = java.io.File.createTempFile("imp", ".xtemplate", appContext.cacheDir)
+            try {
+                val input = appContext.contentResolver.openInputStream(uri)
+                    ?: throw com.xnotes.format.TemplateFormatException(appContext.getString(R.string.err_read_file))
+                input.use { src ->
+                    java.io.FileOutputStream(tmp).use { out ->
+                        val buf = ByteArray(64 * 1024)
+                        var total = 0L
+                        while (true) {
+                            val n = src.read(buf)
+                            if (n < 0) break
+                            total += n
+                            if (total > com.xnotes.format.TemplatePackage.MAX_BYTES) {
+                                throw com.xnotes.format.TemplateFormatException("template package is larger than 16 MiB")
+                            }
+                            out.write(buf, 0, n)
+                        }
+                    }
+                }
+                TemplateLibrary.import(tmp, name)
+            } finally {
+                tmp.delete()
             }
-            .onFailure { message = appContext.getString(R.string.err_import_template, it.message ?: "") }
+        }
+    }
+
+    /** Make a cover or page template from the picture at [uri] and add it to the library. */
+    fun templateFromImage(uri: android.net.Uri, kind: com.xnotes.core.template.TemplateKind) {
+        val name = runCatching {
+            appContext.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+        }.getOrNull()?.let { com.xnotes.core.util.Paths.stem(it) } ?: "Picture"
+        adoptTemplate {
+            val image = java.io.File.createTempFile("img", null, appContext.cacheDir)
+            try {
+                appContext.contentResolver.openInputStream(uri)?.use { src -> java.io.FileOutputStream(image).use { src.copyTo(it) } }
+                    ?: throw com.xnotes.format.TemplateFormatException(appContext.getString(R.string.err_read_file))
+                val pkg = TemplateLibrary.packageFromImage(image, kind, name)
+                try {
+                    TemplateLibrary.import(pkg, name)
+                } finally {
+                    pkg.delete()
+                }
+            } finally {
+                image.delete()
+            }
+        }
+    }
+
+    /** The key of the template last added to the library, so a picker that asked for it can select it. */
+    var adoptedTemplate by mutableStateOf<String?>(null)
+        private set
+
+    /** Run [work] off the main thread, then report it and refresh the pickers. */
+    private fun adoptTemplate(work: () -> TemplateLibrary.Entry) {
+        autosaveScope.launch {
+            val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching(work) }
+            result
+                .onSuccess {
+                    message = appContext.getString(R.string.template_imported, it.template.name)
+                    TemplateLibraryUi.version++
+                    adoptedTemplate = it.key
+                }
+                .onFailure { message = appContext.getString(R.string.err_import_template, it.message ?: "") }
+        }
     }
 
     /** Forget an imported template. Notes that use it keep drawing it from their own copy. */
     fun removeTemplate(key: String) {
-        TemplateLibrary.remove(key)
-        TemplateLibraryUi.version++
+        autosaveScope.launch {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { TemplateLibrary.remove(key) }
+            TemplateLibraryUi.version++
+        }
     }
 
     /** Add a template this note carries, but the library lacks, to the library. */
     fun keepNoteTemplate(key: String) {
-        state.document.templates[key]?.let { importTemplate(it.toByteArray(Charsets.UTF_8)) }
+        val pkg = state.document.templatePackages[key]
+        val text = state.document.templates[key]
+        when {
+            pkg != null -> adoptTemplate { TemplateLibrary.import(pkg, null) }
+            text != null -> adoptTemplate { TemplateLibrary.importText(text) }
+        }
     }
 
-    /** The templates to offer: the library's, then any this note carries that the library lacks. */
-    fun templateChoices(): List<TemplateLibrary.Entry> {
-        val lib = TemplateLibrary.all()
-        val known = lib.mapTo(HashSet()) { it.key }
-        val carried = state.document.templates.mapNotNull { (key, text) ->
+    /** The templates of [kind] to offer: the library's, then any this note carries that the library lacks. */
+    fun templateChoices(kind: com.xnotes.core.template.TemplateKind = com.xnotes.core.template.TemplateKind.PAGE): List<TemplateLibrary.Entry> {
+        val lib = TemplateLibrary.all().filter { it.template.kind == kind }
+        val known = TemplateLibrary.all().mapTo(HashSet()) { it.key }
+        val doc = state.document
+        val carried = (doc.templates.keys + doc.templatePackages.keys).mapNotNull { key ->
             if (key in known) return@mapNotNull null
-            val t = TemplateLibrary.template(state.document, key) ?: return@mapNotNull null
-            TemplateLibrary.Entry(key, t, text, TemplateLibrary.Source.NOTE)
+            val t = TemplateLibrary.template(doc, key)?.takeIf { it.kind == kind } ?: return@mapNotNull null
+            TemplateLibrary.Entry(key, t, doc.templates[key].orEmpty(), TemplateLibrary.Source.NOTE, doc.templatePackages[key])
         }
         return lib + carried.sortedBy { it.template.name.lowercase() }
+    }
+
+    /** Re-read the template library from the notes folder off the main thread, then refresh the pickers. */
+    private fun reloadTemplateLibrary() {
+        val root = browseRoot
+        autosaveScope.launch {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                TemplateLibrary.reload(root?.let { TemplateStore(it) })
+            }
+            TemplateLibraryUi.version++
+        }
+    }
+
+    /** The notes folder's `.xnote/templates/`, through the same SAF calls as the other sidecar files. */
+    private inner class TemplateStore(private val root: String) : TemplateLibrary.Store {
+        private val tree = android.net.Uri.parse(root)
+        private val resolver get() = appContext.contentResolver
+
+        private fun dir(create: Boolean): String? {
+            val side = sidecarDir(tree, browseRootDocId(root), create) ?: return null
+            findChildDocId(tree, side, TEMPLATES_DIR, dir = true)?.let { return it }
+            if (!create) return null
+            val parent = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, side)
+            val made = android.provider.DocumentsContract.createDocument(
+                resolver, parent, android.provider.DocumentsContract.Document.MIME_TYPE_DIR, TEMPLATES_DIR,
+            ) ?: return null
+            return android.provider.DocumentsContract.getDocumentId(made)
+        }
+
+        override fun list(): List<TemplateLibrary.StoredFile> {
+            val dirId = dir(create = false) ?: return emptyList()
+            val childrenUri = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree, dirId)
+            val out = ArrayList<TemplateLibrary.StoredFile>()
+            resolver.query(
+                childrenUri,
+                arrayOf(
+                    android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                    android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                    android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE,
+                ),
+                null, null, null,
+            )?.use { c ->
+                while (c.moveToNext()) {
+                    if (c.getString(2) == android.provider.DocumentsContract.Document.MIME_TYPE_DIR) continue
+                    val id = c.getString(1)
+                    val uri = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, id)
+                    out += TemplateLibrary.StoredFile(id, c.getString(0) ?: continue) { resolver.openInputStream(uri) }
+                }
+            }
+            return out
+        }
+
+        override fun write(name: String, from: java.io.File): String? {
+            val dirId = dir(create = true) ?: return null
+            val made = android.provider.DocumentsContract.createDocument(
+                resolver, android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, dirId), "application/octet-stream", name,
+            ) ?: return null
+            resolver.openOutputStream(made, "wt")?.use { out -> from.inputStream().use { it.copyTo(out) } } ?: return null
+            return android.provider.DocumentsContract.getDocumentId(made)
+        }
+
+        override fun delete(handle: String): Boolean =
+            android.provider.DocumentsContract.deleteDocument(resolver, android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, handle))
     }
 
     fun templateFor(key: String): com.xnotes.core.template.Template? = TemplateLibrary.template(state.document, key)

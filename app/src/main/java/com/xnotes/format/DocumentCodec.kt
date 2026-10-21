@@ -16,6 +16,7 @@ import com.xnotes.core.model.Page
 import com.xnotes.core.model.PagePattern
 import com.xnotes.core.model.PageTemplates
 import com.xnotes.core.model.PageSize
+import com.xnotes.core.model.PageSizeChoice
 import com.xnotes.core.model.PageMargins
 import com.xnotes.core.model.PageStyle
 import com.xnotes.core.model.Rgba
@@ -166,12 +167,10 @@ class DocumentCodec(
             // manifest in place: nothing sits behind it, so it can grow or shrink without moving a
             // byte of the (possibly enormous) PDF ahead of it. See [ZipTail]. Entry order means
             // nothing to a reader, which matches entries by name, so old builds read this fine.
-            // Each image streams straight from its temp file, never as a byte[], so a note full of
-            // large images doesn't materialize them all in the heap on every save.
-            for ((name, file) in assets) zos.putStored(name, file, isCancelled)
-            // The source PDF streams straight from disk for the same reason. [isCancelled] lets a
-            // long copy abort (e.g. import cancel).
-            doc.pdfFile?.let { zos.putStored("assets/source.pdf", it, isCancelled) }
+            // Each image, packaged template and the source PDF streams straight from its file, never
+            // as a byte[], so a note full of large assets doesn't materialize them in the heap on
+            // every save. [isCancelled] lets a long copy abort (e.g. import cancel).
+            for ((name, file) in storedEntries(doc, assets)) zos.putStored(name, file, isCancelled)
             val assetsDone = System.nanoTime()
             writeTail(zos, doc, assets, timing)
             timing?.assetsMs = (assetsDone - started) / 1_000_000L
@@ -220,11 +219,25 @@ class DocumentCodec(
         page.pdfPage?.let { pdfGeometry(doc, it) } ?: PdfPageGeometry.flipped(page.height * 72.0 / doc.dpi)
 
     /** The embedded templates [doc]'s styles name, in key order; built-in rulings need none. */
-    internal fun usedTemplates(doc: Document): List<Pair<String, String>> {
+    internal fun usedTemplates(doc: Document): List<Pair<String, String>> =
+        usedTemplateKeys(doc).mapNotNull { k -> doc.templates[k]?.let { k to it } }
+
+    private fun usedTemplateKeys(doc: Document): Set<String> {
         val keys = sortedSetOf<String>()
         doc.style.template?.let { keys.add(it) }
         for (page in doc.pages) page.style.template?.let { keys.add(it) }
-        return keys.mapNotNull { k -> doc.templates[k]?.let { k to it } }
+        return keys
+    }
+
+    /**
+     * Every STORED entry ahead of the tail, in the order it is written: [images], the packaged
+     * templates the styles name, then the source PDF. An in-place save checks a bundle against this.
+     */
+    internal fun storedEntries(doc: Document, images: List<Pair<String, File>>): List<Pair<String, File>> {
+        val out = ArrayList(images)
+        for (key in usedTemplateKeys(doc)) doc.templatePackages[key]?.let { out.add("$TEMPLATE_ASSET$key$TEMPLATE_EXT" to it) }
+        doc.pdfFile?.let { out.add("assets/source.pdf" to it) }
+        return out
     }
 
     /**
@@ -288,6 +301,7 @@ class DocumentCodec(
         j.endArray()
         writeStyle(j, doc.style)
         writeMargins(j, doc.margins)
+        doc.newPageSize?.let { writeNewPageSize(j, it) }
         j.endObject()
     }
 
@@ -301,6 +315,7 @@ class DocumentCodec(
         j.name("height").value(page.height)
         j.name("pdf_page")
         page.pdfPage?.let { j.value(it) } ?: j.nullValue()
+        if (page.cover) j.name("cover").value(true)
         j.name("items").beginArray()
         // Ids only for what a connector on this page glues to; a page without connectors writes none.
         val ids = GlueIds.of(page.items)
@@ -607,6 +622,16 @@ class DocumentCodec(
         j.endObject()
     }
 
+    /** The size of pages added to the note, written only when it sets one (else they copy the page before). */
+    private fun writeNewPageSize(j: JsonWrite, c: PageSizeChoice) {
+        j.name("new_page_size").beginObject()
+        j.name("size").value(c.size.name.lowercase())
+        j.name("orientation").value(c.orientation.toName())
+        j.name("custom_width_mm").value(c.customWidthMm)
+        j.name("custom_height_mm").value(c.customHeightMm)
+        j.endObject()
+    }
+
     /**
      * Read a `.xnote` from [input]. When [pdfDir] is non-null an embedded source PDF, and when
      * [imageDir] is non-null the inserted images, are streamed out to fresh temp files in those dirs
@@ -623,6 +648,7 @@ class DocumentCodec(
         var flowBytes: ByteArray? = null
         var markupBytes: ByteArray? = null
         val templates = HashMap<String, String>()
+        val packages = HashMap<String, File>()
         val imageFiles = HashMap<String, File>()
         var pdfFile: File? = null
         ZipInputStream(input).use { zis ->
@@ -664,6 +690,14 @@ class DocumentCodec(
                             imageFiles[name] = f
                             timing?.assetsMs += (System.nanoTime() - started) / 1_000_000L
                         }
+                    } else if (name.startsWith(TEMPLATE_ASSET) && name.endsWith(TEMPLATE_EXT)) {
+                        // A packaged template goes to disk like an image, so its pictures never sit in the heap.
+                        val key = name.substring(TEMPLATE_ASSET.length, name.length - TEMPLATE_EXT.length)
+                        if (imageDir != null && TEMPLATE_KEY.matches(key)) {
+                            val f = File.createTempFile("tpl", TEMPLATE_EXT, imageDir)
+                            FileOutputStream(f).use { zis.copyTo(it) }
+                            packages[key] = f
+                        }
                     } else if (name == FlowXml.ENTRY_NAME) {
                         flowBytes = zis.readBytes()
                     } else if (name == MarkupsXfdf.ENTRY_NAME) {
@@ -686,8 +720,10 @@ class DocumentCodec(
         val doc = Document(dpi = m.dpi)
         doc.created = m.created
         doc.templates = templates
+        doc.templatePackages = packages
         doc.style = m.style
         doc.margins = m.margins
+        doc.newPageSize = m.newPageSize
 
         if (m.hasPdf) {
             doc.pdfFile = pdfFile
@@ -757,6 +793,7 @@ class DocumentCodec(
         var hasPdf = false
         var style = PageStyle()
         var margins = PageMargins()
+        var newPageSize: PageSizeChoice? = null
         val bookmarks = ArrayList<Bookmark>()
         val outline = ArrayList<OutlineItem>()
         val pages = ArrayList<Page>()
@@ -840,6 +877,7 @@ class DocumentCodec(
                 "has_pdf" -> m.hasPdf = boolOr(p, false)
                 "style" -> m.style = parseStyle(p)
                 "margins" -> m.margins = parseMargins(p)
+                "new_page_size" -> m.newPageSize = parseNewPageSize(p)
                 "bookmarks" -> parseBookmarks(p, m.bookmarks)
                 "outline" -> parseOutline(p, m.outline)
                 "pages" -> parsePages(p, m)
@@ -916,6 +954,7 @@ class DocumentCodec(
             var width = fallbackW
             var height = fallbackH
             var pdfPage: Int? = null
+            var cover = false
             var style = PageStyle()
             var margins = PageMargins()
             val items = mutableListOf<CanvasItem>()
@@ -927,6 +966,7 @@ class DocumentCodec(
                     "width" -> width = doubleOr(p, fallbackW)
                     "height" -> height = doubleOr(p, fallbackH)
                     "pdf_page" -> pdfPage = intOrNull(p)
+                    "cover" -> cover = boolOr(p, false)
                     "style" -> style = parseStyle(p)
                     "margins" -> margins = parseMargins(p)
                     "items" -> parseItems(p, items, pending, glue)
@@ -942,6 +982,8 @@ class DocumentCodec(
                 pdfPage = null
             }
             val page = Page(width = width, height = height, items = items, pdfPage = pdfPage, style = style, margins = margins)
+            // Only the first page can be the cover; a flag anywhere else is dropped.
+            page.cover = cover && m.pages.isEmpty()
             m.pages.add(page)
             m.pageGlue.add(glue)
             if (pending.isNotEmpty()) m.pageImages.add(Triple(page, pending, glue))
@@ -1447,6 +1489,31 @@ class DocumentCodec(
         return PageMargins(clamp(left), clamp(top), clamp(right), clamp(bottom))
     }
 
+    /** The note's size for added pages; null (copy the page before) when absent or naming a size this build lacks. */
+    private fun parseNewPageSize(p: JsonPull): PageSizeChoice? {
+        if (p.peek() != JsonPull.Token.BEGIN_OBJECT) {
+            p.skipValue()
+            return null
+        }
+        var size: PageSize? = null
+        var orientation = Orientation.PORTRAIT
+        var width = PageSize.A4.shortMm
+        var height = PageSize.A4.longMm
+        p.beginObject()
+        while (p.hasNext()) {
+            when (p.nextName()) {
+                "size" -> size = stringOrNull(p)?.let { name -> PageSize.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } }
+                "orientation" -> orientation = Orientation.fromName(stringOrNull(p))
+                "custom_width_mm" -> width = doubleOrNull(p)?.takeIf { it.isFinite() } ?: width
+                "custom_height_mm" -> height = doubleOrNull(p)?.takeIf { it.isFinite() } ?: height
+                else -> p.skipValue()
+            }
+        }
+        p.endObject()
+        fun clamp(mm: Double) = mm.coerceIn(PageSize.CUSTOM_MIN_MM, PageSize.CUSTOM_MAX_MM)
+        return size?.let { PageSizeChoice(it, orientation, clamp(width), clamp(height)) }
+    }
+
     private fun materializeImage(spec: PendingImage, imageFiles: Map<String, File>): ImageItem? {
         val file = imageFiles[spec.asset] ?: return null
         var w = spec.srcW
@@ -1602,6 +1669,9 @@ class DocumentCodec(
         private const val STAND_IN_FLATTEN = 0.25
 
         private const val TEMPLATE_DIR = "templates/"
+
+        /** A packaged template is a STORED asset, a name older readers skip rather than misread as text. */
+        private const val TEMPLATE_ASSET = "assets/template-"
         private const val TEMPLATE_EXT = ".xtemplate"
 
         /** What a template key may look like: it becomes part of a zip entry name. */

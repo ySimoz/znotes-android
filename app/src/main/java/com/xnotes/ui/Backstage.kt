@@ -139,7 +139,6 @@ import com.xnotes.platform.PdfOpenError
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.ui.platform.LocalContext
-import com.xnotes.ui.creation.NoteCreationDialog
 import androidx.compose.runtime.mutableIntStateOf
 import java.time.YearMonth
 import java.time.ZoneId
@@ -213,12 +212,10 @@ fun Backstage(
     onOpenBeside: (String) -> (() -> Unit)? = { null },
     /** Picked items are to be exported as PDFs, zipped under the given name; the callback runs once a destination is chosen. */
     onExportPdfs: (List<BrowseEntry>, String, () -> Unit) -> Unit = { _, _, _ -> },
-    /** Pick a user template to add to the template library. */
+    /** The New note screen asked to import a template file. */
     onImportTemplate: () -> Unit = {},
-    /** Pick images from storage for note cover. */
-    onPickCoverImage: () -> Unit = {},
-    /** Pick images from storage for page background. */
-    onPickPageImage: () -> Unit = {},
+    /** The New note screen asked to make a cover or page template from a picture. */
+    onTemplateFromImage: (com.xnotes.core.template.TemplateKind) -> Unit = {},
 ) {
     // Below this width the sidebar becomes a slide-over drawer instead of a persistent pane.
     val compact = LocalConfiguration.current.screenWidthDp < COMPACT_WIDTH_DP
@@ -234,13 +231,12 @@ fun Backstage(
         openSplit = onOpenSplit,
         openBeside = onOpenBeside,
         exportPdfs = onExportPdfs,
+        importTemplate = onImportTemplate,
+        templateFromImage = onTemplateFromImage,
     )
     // The backstage is the root of the stack — ordinary base content, not a dialog. The activity
     // window already runs edge-to-edge with the system bars hidden (MainActivity.applyFullscreen).
-    BackstageContent(
-        editor, compact, view, onSelectView, calls, onExitApp, onImportCodeTheme, onImportFont,
-        onImportTemplate, onPickCoverImage, onPickPageImage,
-    )
+    BackstageContent(editor, compact, view, onSelectView, calls, onExitApp, onImportCodeTheme, onImportFont)
 }
 
 /** Width at or above which the sidebar is a persistent pane rather than a drawer. */
@@ -268,9 +264,6 @@ private fun BackstageContent(
     onExitApp: () -> Unit,
     onImportCodeTheme: () -> Unit,
     onImportFont: () -> Unit,
-    onImportTemplate: () -> Unit,
-    onPickCoverImage: () -> Unit,
-    onPickPageImage: () -> Unit,
 ) {
     val palette = LocalPalette.current
     var createMode by remember { mutableStateOf(CreateMode.NONE) }
@@ -366,7 +359,7 @@ private fun BackstageContent(
         Box(Modifier.fillMaxSize().background(palette.bg.toComposeColor())) {
             BackstageMain(
                 Modifier.fillMaxSize(), editor, view, compact, drawerOpen, { animateClose = true; drawerOpen = true }, { selectView(BackstageView.HOME) },
-                calls, createMode, { createMode = it }, onImportCodeTheme, onImportFont, onImportTemplate, onPickCoverImage, onPickPageImage, link, dragDrop, { selectView(BackstageView.PREFERENCES) },
+                calls, createMode, { createMode = it }, onImportCodeTheme, onImportFont, link, dragDrop, { selectView(BackstageView.PREFERENCES) },
             )
             AnimatedVisibility(
                 visible = drawerOpen,
@@ -403,7 +396,7 @@ private fun BackstageContent(
                     }
                 },
                 editor, view, compact, true, { setRailed(false) }, { selectView(BackstageView.HOME) },
-                calls, createMode, { createMode = it }, onImportCodeTheme, onImportFont, onImportTemplate, onPickCoverImage, onPickPageImage, link, dragDrop, { selectView(BackstageView.PREFERENCES) },
+                calls, createMode, { createMode = it }, onImportCodeTheme, onImportFont, link, dragDrop, { selectView(BackstageView.PREFERENCES) },
             )
             // Both stay composed so a fold never pays to build one; only the current one is measured and placed.
             Layout(
@@ -595,9 +588,6 @@ private fun BackstageMain(
     onCreateMode: (CreateMode) -> Unit,
     onImportCodeTheme: () -> Unit,
     onImportFont: () -> Unit,
-    onImportTemplate: () -> Unit,
-    onPickCoverImage: () -> Unit,
-    onPickPageImage: () -> Unit,
     link: ExplorerLink,
     dragDrop: ExplorerDragDropState,
     onOpenPreferences: () -> Unit,
@@ -636,7 +626,7 @@ private fun BackstageMain(
         Layout(
             content = {
                 Box(Modifier.layoutId(BackstageView.HOME).fillMaxSize()) {
-                    HomePane(editor, calls, createMode, onCreateMode, sidebarOpen, onShowSidebar, link, dragDrop, onImportTemplate, onPickCoverImage, onPickPageImage)
+                    HomePane(editor, calls, createMode, onCreateMode, sidebarOpen, onShowSidebar, link, dragDrop)
                 }
                 if (shouldComposePrefs) {
                     Box(Modifier.layoutId(BackstageView.PREFERENCES).fillMaxSize()) {
@@ -914,6 +904,8 @@ private class ExplorerCalls(
     val openBeside: (String) -> (() -> Unit)?,
     /** Exports picked items as PDFs, zipped under the given name; the callback runs once a destination is chosen. */
     val exportPdfs: (List<BrowseEntry>, String, () -> Unit) -> Unit,
+    val importTemplate: () -> Unit,
+    val templateFromImage: (com.xnotes.core.template.TemplateKind) -> Unit,
 )
 
 @Composable
@@ -926,15 +918,12 @@ private fun HomePane(
     onShowSidebar: () -> Unit,
     link: ExplorerLink,
     dragDrop: ExplorerDragDropState,
-    onImportTemplate: () -> Unit,
-    onPickCoverImage: () -> Unit,
-    onPickPageImage: () -> Unit,
 ) {
     val focusManager = LocalFocusManager.current
     // A tap on empty space anywhere in the pane drops focus from the search field, dismissing it
     // (children like tiles and buttons consume their own taps, so this only fires "outside").
     Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } }) {
-        ExplorerSection(editor, calls, createMode, onCreateMode, sidebarOpen, onShowSidebar, link, dragDrop, onImportTemplate, onPickCoverImage, onPickPageImage)
+        ExplorerSection(editor, calls, createMode, onCreateMode, sidebarOpen, onShowSidebar, link, dragDrop)
     }
 }
 
@@ -984,9 +973,6 @@ private fun ExplorerSection(
     onShowSidebar: () -> Unit,
     link: ExplorerLink,
     dragDrop: ExplorerDragDropState,
-    onImportTemplate: () -> Unit,
-    onPickCoverImage: () -> Unit,
-    onPickPageImage: () -> Unit,
 ) {
     val palette = LocalPalette.current
     val root = editor.browseRoot
@@ -1866,9 +1852,38 @@ private fun ExplorerSection(
     val pendingImport = editor.pendingImport
     // Clear any stale error when a fresh name dialog opens for a new operation.
     LaunchedEffect(createMode, pendingImport) { fieldError = null }
-    // Name entry for a new note, new folder, or a pending PDF import. Hidden while an import is
+    // A new note gets the full-screen New note; it opens once it is made.
+    if (createMode == CreateMode.FILE && pendingImport == null && !editor.importing) {
+        var busy by remember { mutableStateOf(false) }
+        NewNoteScreen(
+            editor = editor,
+            folderName = stack.lastOrNull()?.second ?: rootName ?: stringResource(R.string.folder),
+            initialName = remember { nextUntitled(editor, editor.cachedChildren(root, currentDocId)) },
+            error = fieldError,
+            busy = busy,
+            onImportTemplate = { callsNow.value.importTemplate() },
+            onTemplateFromImage = { callsNow.value.templateFromImage(it) },
+            onCreate = { n, setup ->
+                busy = true
+                scope.launch {
+                    val uri = withContext(Dispatchers.IO) { editor.createNoteFile(root, currentDocId, n, setup) }
+                    busy = false
+                    if (uri != null) {
+                        fieldError = null
+                        onCreateMode(CreateMode.NONE)
+                        refreshKey++
+                        callsNow.value.openFile(uri)
+                    } else {
+                        fieldError = context.getString(R.string.err_create_note)
+                    }
+                }
+            },
+            onClose = { fieldError = null; onCreateMode(CreateMode.NONE) },
+        )
+    }
+    // Name entry for a new canvas, new folder, or a pending PDF import. Hidden while an import is
     // actually being written, so only the "Importing…" dialog shows.
-    if ((createMode != CreateMode.NONE || pendingImport != null) && !editor.importing) {
+    if ((createMode == CreateMode.CANVAS || createMode == CreateMode.FOLDER || pendingImport != null) && !editor.importing) {
         val isFolder = pendingImport == null && createMode == CreateMode.FOLDER
         val default = when {
             pendingImport != null -> pendingImport.defaultName // import names default to the source file
@@ -1876,78 +1891,49 @@ private fun ExplorerSection(
                 nextUntitled(editor, editor.cachedChildren(root, currentDocId))
             else -> "" // new folder
         }
-        if (createMode == CreateMode.FILE && pendingImport == null) {
-            NoteCreationDialog(
-                title = stringResource(R.string.new_note),
-                initial = default,
-                editor = editor,
-                error = fieldError,
-                onImportTemplate = onImportTemplate,
-                onPickCoverImage = onPickCoverImage,
-                onPickPageImage = onPickPageImage,
-                onConfirm = { n, options ->
-                    scope.launch {
-                        val uri = withContext(Dispatchers.IO) { editor.createBlankNoteFile(root, currentDocId, n, options) }
-                        if (uri != null) {
-                            onCreateMode(CreateMode.NONE)
-                            refreshKey++
-                        } else {
-                            fieldError = context.getString(R.string.err_create_note)
+        NameDialog(
+            title = when {
+                pendingImport != null -> stringResource(R.string.import_title)
+                isFolder -> stringResource(R.string.new_folder)
+                createMode == CreateMode.CANVAS -> stringResource(R.string.new_canvas)
+                else -> stringResource(R.string.new_note)
+            },
+            initial = default,
+            confirmLabel = if (pendingImport != null) stringResource(R.string.save) else stringResource(R.string.create),
+            placeholder = if (isFolder) stringResource(R.string.folder_name) else null,
+            allowEmpty = !isFolder, // a folder needs a name; a blank note name becomes "untitled_N"
+            error = fieldError,
+            onConfirm = { n ->
+                when {
+                    pendingImport != null -> scope.launch {
+                        // Land the import in the current folder; it opens only when the user taps it.
+                        // commitImportAsync drives the "Importing…" dialog and runs the copy off-thread.
+                        val uri = editor.commitImportAsync(root, currentDocId, n)
+                        when {
+                            uri != null -> refreshKey++
+                            editor.pendingImport != null -> fieldError = context.getString( // genuine failure; keep the prompt
+                                if (editor.lastImportError == PdfOpenError.PASSWORD) R.string.err_pdf_password else R.string.err_save_that_note,
+                            )
+                            // else: cancelled — the prompt already dismissed (pendingImport cleared)
                         }
                     }
-                },
-                onDismiss = {
-                    editor.noteCreationCoverImageBytes = null
-                    editor.noteCreationPageImageBytes = null
-                    fieldError = null
-                    onCreateMode(CreateMode.NONE)
-                },
-            )
-        } else {
-            NameDialog(
-                title = when {
-                    pendingImport != null -> stringResource(R.string.import_title)
-                    isFolder -> stringResource(R.string.new_folder)
-                    createMode == CreateMode.CANVAS -> stringResource(R.string.new_canvas)
-                    else -> stringResource(R.string.new_note)
-                },
-                initial = default,
-                confirmLabel = if (pendingImport != null) stringResource(R.string.save) else stringResource(R.string.create),
-                placeholder = if (isFolder) stringResource(R.string.folder_name) else null,
-                allowEmpty = !isFolder, // a folder needs a name; a blank note name becomes "untitled_N"
-                error = fieldError,
-                onConfirm = { n ->
-                    when {
-                        pendingImport != null -> scope.launch {
-                            // Land the import in the current folder; it opens only when the user taps it.
-                            // commitImportAsync drives the "Importing…" dialog and runs the copy off-thread.
-                            val uri = editor.commitImportAsync(root, currentDocId, n)
-                            when {
-                                uri != null -> refreshKey++
-                                editor.pendingImport != null -> fieldError = context.getString( // genuine failure; keep the prompt
-                                    if (editor.lastImportError == PdfOpenError.PASSWORD) R.string.err_pdf_password else R.string.err_save_that_note,
-                                )
-                                // else: cancelled — the prompt already dismissed (pendingImport cleared)
-                            }
-                        }
-                        isFolder -> scope.launch {
-                            val ok = withContext(Dispatchers.IO) { editor.createFolder(root, currentDocId, n) }
-                            if (ok) { onCreateMode(CreateMode.NONE); refreshKey++ } else fieldError = context.getString(R.string.err_create_folder)
-                        }
-                        createMode == CreateMode.CANVAS -> scope.launch {
-                            val uri = withContext(Dispatchers.IO) { editor.createBlankCanvasFile(root, currentDocId, n) }
-                            if (uri != null) { onCreateMode(CreateMode.NONE); refreshKey++ } else fieldError = context.getString(R.string.err_create_canvas)
-                        }
-                        else -> scope.launch {
-                            // Just create the note in the explorer — it opens only when the user taps it.
-                            val uri = withContext(Dispatchers.IO) { editor.createBlankNoteFile(root, currentDocId, n) }
-                            if (uri != null) { onCreateMode(CreateMode.NONE); refreshKey++ } else fieldError = context.getString(R.string.err_create_note)
-                        }
+                    isFolder -> scope.launch {
+                        val ok = withContext(Dispatchers.IO) { editor.createFolder(root, currentDocId, n) }
+                        if (ok) { onCreateMode(CreateMode.NONE); refreshKey++ } else fieldError = context.getString(R.string.err_create_folder)
                     }
-                },
-                onDismiss = { fieldError = null; if (pendingImport != null) editor.cancelImport() else onCreateMode(CreateMode.NONE) },
-            )
-        }
+                    createMode == CreateMode.CANVAS -> scope.launch {
+                        val uri = withContext(Dispatchers.IO) { editor.createBlankCanvasFile(root, currentDocId, n) }
+                        if (uri != null) { onCreateMode(CreateMode.NONE); refreshKey++ } else fieldError = context.getString(R.string.err_create_canvas)
+                    }
+                    else -> scope.launch {
+                        // Just create the note in the explorer — it opens only when the user taps it.
+                        val uri = withContext(Dispatchers.IO) { editor.createBlankNoteFile(root, currentDocId, n) }
+                        if (uri != null) { onCreateMode(CreateMode.NONE); refreshKey++ } else fieldError = context.getString(R.string.err_create_note)
+                    }
+                }
+            },
+            onDismiss = { fieldError = null; if (pendingImport != null) editor.cancelImport() else onCreateMode(CreateMode.NONE) },
+        )
     }
 
     namingColor?.let { c -> ColorNameDialog(editor, c) { namingColor = null } }

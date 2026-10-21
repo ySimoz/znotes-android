@@ -158,7 +158,10 @@ class MainActivity : ComponentActivity() {
         }
         setTheme(com.xnotes.R.style.Theme_Xnotes) // leave the dark launch/splash theme behind
         applyFullscreen(!deviceHasDisplayCutout(this)) // provisional; reconciled once the editor loads prefs
-        pendingPdfImport = pdfImportUri(intent)
+        // The intent that started the task comes back whenever Android rebuilds it, from a saved state
+        // or from Recents after the process died or the app was updated; it was handled the first time.
+        val rebuilt = savedInstanceState != null || (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0
+        if (!rebuilt) pendingPdfImport = pdfImportUri(intent)
         setContent {
             val context = LocalContext.current
             val ed = remember { Editor(context).also { editor = it } }
@@ -306,7 +309,8 @@ class MainActivity : ComponentActivity() {
 
     // The PDF uri carried by an inbound VIEW ("Open with") or SEND ("Share") intent, else null.
     private fun pdfImportUri(intent: Intent?): Uri? = when (intent?.action) {
-        Intent.ACTION_VIEW -> intent.data
+        // Only the PDF filter takes VIEW, but a task started by another build's filters keeps its intent.
+        Intent.ACTION_VIEW -> intent.data?.takeIf { (intent.type ?: runCatching { contentResolver.getType(it) }.getOrNull()) == "application/pdf" }
         Intent.ACTION_SEND ->
             if (intent.type == "application/pdf")
                 IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
@@ -551,57 +555,6 @@ private fun EditorScreen(
         }
     }
 
-    // Both asset pickers accept batches, but only the first readable image is selected
-    // for the new note. All readable images are saved in the corresponding library.
-    fun importCreationImages(uris: List<Uri>, kind: com.xnotes.platform.CustomAssetFolders.Kind) {
-        if (uris.isEmpty()) return
-        scope.launch {
-            val root = editor.browseRoot
-            val (selected, imported, failed) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                var firstBytes: ByteArray? = null
-                var count = 0
-                var fail = 0
-                for (uri in uris) {
-                    val bytes = runCatching { resolver.openInputStream(uri)?.use { it.readBytes() } }
-                        .getOrNull()?.takeIf { it.isNotEmpty() }
-                    if (bytes == null) {
-                        fail++
-                        continue
-                    }
-                    if (firstBytes == null) firstBytes = bytes
-                    val name = displayNameOf(resolver, uri)
-                    if (com.xnotes.platform.CustomAssetFolders.storeImage(context, root, bytes, name, kind)) {
-                        count++
-                    } else {
-                        fail++
-                    }
-                }
-                Triple(firstBytes, count, fail)
-            }
-            if (selected != null) {
-                if (kind == com.xnotes.platform.CustomAssetFolders.Kind.COVER) {
-                    editor.noteCreationCoverImageBytes = selected
-                } else {
-                    editor.noteCreationPageImageBytes = selected
-                }
-            }
-            if (imported > 0) editor.customAssetsChanged()
-            editor.message = when {
-                imported > 0 -> context.getString(R.string.create_images_imported, imported, failed)
-                selected == null -> context.getString(R.string.err_read_image)
-                else -> context.getString(R.string.create_images_not_saved)
-            }
-        }
-    }
-
-    val pickCreationCoverLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        importCreationImages(uris, com.xnotes.platform.CustomAssetFolders.Kind.COVER)
-    }
-
-    val pickCreationPageImageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        importCreationImages(uris, com.xnotes.platform.CustomAssetFolders.Kind.PAGE)
-    }
-
     // A user Helix code theme (.toml), parsed + stored by the editor.
     val importCodeThemeLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -612,19 +565,15 @@ private fun EditorScreen(
         }
     }
 
-    // A user page template (.xtemplate), checked and stored in the template library.
+    // A user page template (.xtemplate, plain or packaged), checked and stored in the template library.
     val importTemplateLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            val name = displayNameOf(resolver, uri).orEmpty().lowercase()
-            if (name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".webp")) {
-                editor.message = context.getString(R.string.err_template_is_image)
-                return@rememberLauncherForActivityResult
-            }
-            runCatching { resolver.openInputStream(uri)?.use { it.readBytes() } }
-                .getOrNull()
-                ?.let { editor.importTemplate(it) }
-                ?: run { editor.message = context.getString(R.string.err_read_file) }
-        }
+        if (uri != null) editor.importTemplate(uri)
+    }
+
+    // A picture made into a one-image cover or page template, whichever the New note screen asked for.
+    var pendingTemplateKind by remember { mutableStateOf(com.xnotes.core.template.TemplateKind.PAGE) }
+    val templateFromImageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) editor.templateFromImage(uri, pendingTemplateKind)
     }
 
     // A user font (.ttf/.otf), stored + registered by the editor.
@@ -925,22 +874,15 @@ private fun EditorScreen(
         )
     }
 
-    LaunchedEffect(editor.message) {
-        editor.message?.let {
-            val action = editor.messageAction
-            editor.messageAction = null
-            val result = snackbar.showSnackbar(
-                it, actionLabel = action?.first,
-                duration = if (action != null) androidx.compose.material3.SnackbarDuration.Long else androidx.compose.material3.SnackbarDuration.Short,
-            )
-            if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) action?.second?.invoke()
-            editor.message = null
-        }
+    // A window over this screen that shows messages itself takes them while it is open.
+    LaunchedEffect(editor.message, editor.messageHosts) {
+        if (editor.messageHosts == 0) editor.showMessage(snackbar)
     }
     // The second pane raises its own messages; surface them through the same snackbar.
     val secondaryMessage = editor.secondary?.message
-    LaunchedEffect(secondaryMessage) {
-        if (secondaryMessage != null) {
+    val secondaryHosts = editor.secondary?.messageHosts ?: 0
+    LaunchedEffect(secondaryMessage, secondaryHosts) {
+        if (secondaryMessage != null && secondaryHosts == 0) {
             snackbar.showSnackbar(secondaryMessage)
             editor.secondary?.message = null
         }
@@ -981,9 +923,6 @@ private fun EditorScreen(
                 onExitApp = { (context as? android.app.Activity)?.finish() },
                 onImportCodeTheme = { importCodeThemeLauncher.launch(arrayOf("*/*")) },
                 onImportFont = { importFontLauncher.launch(arrayOf("*/*")) },
-                onImportTemplate = { importTemplateLauncher.launch(arrayOf("*/*")) },
-                onPickCoverImage = { pickCreationCoverLauncher.launch(arrayOf("image/*")) },
-                onPickPageImage = { pickCreationPageImageLauncher.launch(arrayOf("image/*")) },
                 onImportPdf = { importPdfLauncher.launch(arrayOf("application/pdf")) },
                 onOpenFile = { uri -> guarded(editor) { openTreeFile(uri) } },
                 onPickRoot = { pickRootLauncher.launch(null) },
@@ -1004,6 +943,11 @@ private fun EditorScreen(
                     val lone = com.xnotes.ui.lonePdf(picked)
                     if (lone != null) exportPdfLauncher.launch("${com.xnotes.core.util.DocumentKind.stripSuffix(lone.name)}.pdf")
                     else exportZipLauncher.launch("$name.zip")
+                },
+                onImportTemplate = { importTemplateLauncher.launch(arrayOf("*/*")) },
+                onTemplateFromImage = { kind ->
+                    pendingTemplateKind = kind
+                    templateFromImageLauncher.launch(arrayOf("image/*"))
                 },
             )
 
@@ -1039,6 +983,10 @@ private fun EditorScreen(
                 },
                 onAddStickers = { addStickersLauncher.launch(arrayOf("image/*")) },
                 onImportTemplate = { importTemplateLauncher.launch(arrayOf("*/*")) },
+                onTemplateFromImage = { kind ->
+                    pendingTemplateKind = kind
+                    templateFromImageLauncher.launch(arrayOf("image/*"))
+                },
                 onSharePages = { pane, pages, asPdf -> sharePages(pane, pages, asPdf) },
                 onSavePagesAsPdf = { pane, pages -> savePagesAsPdf(pane, pages) },
                 onSavePagesAsImages = { pane, pages -> savePagesAsImages(pane, pages) },
@@ -1202,6 +1150,7 @@ private class PaneActions(
     val onInsertCanvasImage: (Editor, com.xnotes.core.geometry.Pt?) -> Unit,
     val onAddStickers: () -> Unit,
     val onImportTemplate: () -> Unit,
+    val onTemplateFromImage: (com.xnotes.core.template.TemplateKind) -> Unit,
     val onSharePages: (Editor, List<Int>, Boolean) -> Unit,
     val onSavePagesAsPdf: (Editor, List<Int>) -> Unit,
     val onSavePagesAsImages: (Editor, List<Int>) -> Unit,
@@ -1420,6 +1369,8 @@ private fun EditorPane(
                             onSavePagesAsPdf = { pages -> actions.onSavePagesAsPdf(editor, pages) },
                             onSavePagesAsImages = { pages -> actions.onSavePagesAsImages(editor, pages) },
                             onInsertPdf = { after -> actions.onInsertPdf(editor, after) },
+                            onImportTemplate = actions.onImportTemplate,
+                            onTemplateFromImage = actions.onTemplateFromImage,
                         )
                     }
                     Box(modifier = Modifier.weight(1f).fillMaxHeight().clipToBounds()) {

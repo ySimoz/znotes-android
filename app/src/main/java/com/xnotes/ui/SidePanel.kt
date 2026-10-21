@@ -39,6 +39,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -99,9 +100,29 @@ fun SidePanel(
     onSavePagesAsPdf: (indices: List<Int>) -> Unit = {},
     onSavePagesAsImages: (indices: List<Int>) -> Unit = {},
     onInsertPdf: (after: Int) -> Unit = {},
+    onImportTemplate: () -> Unit = {},
+    onTemplateFromImage: (com.xnotes.core.template.TemplateKind) -> Unit = {},
 ) {
     val palette = LocalPalette.current
     val tab = editor.sidePanelTab
+    var pickingCover by remember { mutableStateOf(false) }
+    if (pickingCover) {
+        NewNoteScreen(
+            editor = editor,
+            folderName = "",
+            initialName = "",
+            error = null,
+            busy = false,
+            onImportTemplate = onImportTemplate,
+            onTemplateFromImage = onTemplateFromImage,
+            onCreate = { _, _ -> },
+            onClose = { pickingCover = false },
+            coverEdit = CoverEdit(editor.firstPageMm, editor.coverStyle) { style ->
+                editor.setCover(style)
+                pickingCover = false
+            },
+        )
+    }
     Column(
         Modifier
             .width(224.dp)
@@ -116,7 +137,7 @@ fun SidePanel(
         }
         Box(Modifier.fillMaxWidth().weight(1f)) {
             when (tab) {
-                SidePanelTab.PAGES -> PagesTab(editor, onSharePages, onSavePagesAsPdf, onSavePagesAsImages, onInsertPdf)
+                SidePanelTab.PAGES -> PagesTab(editor, onSharePages, onSavePagesAsPdf, onSavePagesAsImages, onInsertPdf) { pickingCover = true }
                 SidePanelTab.CONTENTS -> ContentsTab(editor)
                 SidePanelTab.BOOKMARKS -> BookmarksTab(editor)
                 SidePanelTab.SEARCH -> SearchTab(editor)
@@ -150,6 +171,7 @@ private fun PagesTab(
     onSavePagesAsPdf: (List<Int>) -> Unit,
     onSavePagesAsImages: (List<Int>) -> Unit,
     onInsertPdf: (Int) -> Unit,
+    onPickCover: () -> Unit,
 ) {
     val listState = rememberLazyListState()
     // Open the panel on the current page, not page 1 (re-runs each open: a hidden panel leaves composition).
@@ -216,6 +238,7 @@ private fun PagesTab(
                         onSavePagesAsPdf = onSavePagesAsPdf,
                         onSavePagesAsImages = onSavePagesAsImages,
                         onInsertPdf = onInsertPdf,
+                        onPickCover = onPickCover,
                         onTap = {
                             if (selecting) editor.togglePageSelection(index) else editor.goToPage(index)
                         },
@@ -356,6 +379,7 @@ private fun PageThumb(
     onSavePagesAsPdf: (List<Int>) -> Unit,
     onSavePagesAsImages: (List<Int>) -> Unit,
     onInsertPdf: (Int) -> Unit,
+    onPickCover: () -> Unit,
     onTap: () -> Unit,
     onDragStart: (Offset) -> Unit,
     onDrag: (Offset) -> Unit,
@@ -429,17 +453,19 @@ private fun PageThumb(
                 menuOpen = menuOpen,
                 onMenuOpenChange = { menuOpen = it },
                 editor = editor,
+                isCover = page.cover,
                 onSharePages = onSharePages,
                 onSavePagesAsPdf = onSavePagesAsPdf,
                 onSavePagesAsImages = onSavePagesAsImages,
                 onInsertPdf = onInsertPdf,
+                onPickCover = onPickCover,
             )
         }
-        Text(
-            "%02d".format(index + 1),
-            color = (if (current || selected) palette.accent else palette.textDim).toComposeColor(),
-            fontSize = 10.sp,
-        )
+        val captionColor = (if (current || selected) palette.accent else palette.textDim).toComposeColor()
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("%02d".format(index + 1), color = captionColor, fontSize = 10.sp)
+            if (page.cover) Text(stringResource(R.string.cover), color = captionColor, fontSize = 10.sp)
+        }
     }
 }
 
@@ -453,10 +479,12 @@ private fun androidx.compose.foundation.layout.BoxScope.PageThumbBadges(
     menuOpen: Boolean,
     onMenuOpenChange: (Boolean) -> Unit,
     editor: Editor,
+    isCover: Boolean,
     onSharePages: (List<Int>, Boolean) -> Unit,
     onSavePagesAsPdf: (List<Int>) -> Unit,
     onSavePagesAsImages: (List<Int>) -> Unit,
     onInsertPdf: (Int) -> Unit,
+    onPickCover: () -> Unit,
 ) {
     val palette = LocalPalette.current
     bitmap?.let { Image(it, contentDescription = stringResource(R.string.page_n, index + 1), modifier = Modifier.fillMaxSize()) }
@@ -482,7 +510,7 @@ private fun androidx.compose.foundation.layout.BoxScope.PageThumbBadges(
                     Icon(XnotesIcons.more, stringResource(R.string.page_options), tint = palette.text.toComposeColor(), modifier = Modifier.size(16.dp))
                 }
             }
-            PageContextMenu(editor, index, menuOpen, { onMenuOpenChange(false) }, onSharePages, onSavePagesAsPdf, onSavePagesAsImages, onInsertPdf)
+            PageContextMenu(editor, index, isCover, menuOpen, { onMenuOpenChange(false) }, onSharePages, onSavePagesAsPdf, onSavePagesAsImages, onInsertPdf, onPickCover)
         }
     }
 }
@@ -587,12 +615,14 @@ private const val MENU_SAVE = 2
 private fun PageContextMenu(
     editor: Editor,
     index: Int,
+    isCover: Boolean,
     expanded: Boolean,
     onDismiss: () -> Unit,
     onSharePages: (List<Int>, Boolean) -> Unit,
     onSavePagesAsPdf: (List<Int>) -> Unit,
     onSavePagesAsImages: (List<Int>) -> Unit,
     onInsertPdf: (Int) -> Unit,
+    onPickCover: () -> Unit,
 ) {
     val palette = LocalPalette.current
     var sub by remember { mutableStateOf(MENU_MAIN) }
@@ -612,6 +642,15 @@ private fun PageContextMenu(
                 DropdownMenuItem(text = { Text("PDF") }, leadingIcon = menuIcon(XnotesIcons.exportDoc), onClick = { onSavePagesAsPdf(one); onDismiss() })
             }
             else -> {
+                // The cover is only ever the first page, so only it offers these.
+                if (isCover) {
+                    DropdownMenuItem(text = { Text(stringResource(R.string.change_cover)) }, leadingIcon = menuIcon(XnotesIcons.palette), onClick = { onDismiss(); onPickCover() })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.remove_cover)) }, leadingIcon = menuIcon(XnotesIcons.trash), onClick = { editor.removeCover(); onDismiss() })
+                    HorizontalDivider(color = palette.border.toComposeColor())
+                } else if (index == 0) {
+                    DropdownMenuItem(text = { Text(stringResource(R.string.add_cover_ellipsis)) }, leadingIcon = menuIcon(XnotesIcons.palette), onClick = { onDismiss(); onPickCover() })
+                    HorizontalDivider(color = palette.border.toComposeColor())
+                }
                 DropdownMenuItem(text = { Text(stringResource(R.string.add_page)) }, leadingIcon = menuIcon(XnotesIcons.plus), onClick = { editor.insertPageAfter(index); onDismiss() })
                 DropdownMenuItem(text = { Text(stringResource(R.string.add_to_contents)) }, leadingIcon = menuIcon(XnotesIcons.contents), onClick = { editor.addOutlineItem(index, "Page ${index + 1}"); editor.sidePanelTab = SidePanelTab.CONTENTS; onDismiss() })
                 DropdownMenuItem(text = { Text(stringResource(R.string.insert_pdf)) }, leadingIcon = menuIcon(XnotesIcons.importDoc), onClick = { onInsertPdf(index); onDismiss() })

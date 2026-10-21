@@ -257,10 +257,10 @@ internal fun NewCanvasScreen(
                                 background = background,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .heightIn(min = 280.dp, max = 440.dp)
-                                    .shadow(4.dp, RoundedCornerShape(8.dp))
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .border(1.dp, palette.paperBorder.toComposeColor(), RoundedCornerShape(8.dp)),
+                                    .height(340.dp)
+                                    .shadow(6.dp, RoundedCornerShape(12.dp))
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .border(1.5.dp, palette.paperBorder.toComposeColor(), RoundedCornerShape(12.dp)),
                             )
                         }
 
@@ -296,10 +296,10 @@ internal fun NewCanvasScreen(
                             background = background,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(200.dp)
-                                .shadow(3.dp, RoundedCornerShape(8.dp))
-                                .clip(RoundedCornerShape(8.dp))
-                                .border(1.dp, palette.paperBorder.toComposeColor(), RoundedCornerShape(8.dp)),
+                                .height(220.dp)
+                                .shadow(4.dp, RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(12.dp))
+                                .border(1.5.dp, palette.paperBorder.toComposeColor(), RoundedCornerShape(12.dp)),
                         )
                         Spacer(Modifier.height(20.dp))
                         CanvasTuneControls(
@@ -428,67 +428,78 @@ private fun CanvasBackgroundPreview(
     val paper = background.paperColor ?: palette.paper
     val patternColor = background.patternColor
 
-    androidx.compose.foundation.Canvas(modifier = modifier) {
-        drawRect(color = paper.toComposeColor())
+    val paperLum = (0.299 * paper.r + 0.587 * paper.g + 0.114 * paper.b) / 255.0
+    val isDarkPaper = paperLum < 0.5
+    val userAlpha = patternColor.a / 255f
+    val previewAlpha = maxOf(userAlpha * 1.5f, 0.45f).coerceAtMost(1f)
+    val strokeColor = if (isDarkPaper && patternColor.r == 150 && patternColor.g == 150 && patternColor.b == 150) {
+        Color.White.copy(alpha = previewAlpha)
+    } else {
+        patternColor.toComposeColor().copy(alpha = previewAlpha)
+    }
 
-        val spacingPx = background.clampedSpacing.toFloat()
-        if (spacingPx <= 0f || background.pattern == PagePattern.NONE) return@Canvas
+    Box(
+        modifier = modifier.background(paper.toComposeColor()),
+    ) {
+        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+            val spacingPx = (background.clampedSpacing.toFloat() * 0.75f).dp.toPx()
+            if (spacingPx <= 0f || background.pattern == PagePattern.NONE) return@Canvas
 
-        val strokeColor = patternColor.toComposeColor()
-        val strokeWidth = 1.2.dp.toPx()
-        val dotRadius = 1.5.dp.toPx()
+            val strokeWidth = 1.5.dp.toPx()
+            val dotRadius = 2.dp.toPx()
 
-        when (background.pattern) {
-            PagePattern.LINES -> {
-                var y = spacingPx
-                while (y < size.height) {
-                    drawLine(
-                        color = strokeColor,
-                        start = Offset(0f, y),
-                        end = Offset(size.width, y),
-                        strokeWidth = strokeWidth,
-                    )
-                    y += spacingPx
-                }
-            }
-            PagePattern.GRID -> {
-                var x = spacingPx
-                while (x < size.width) {
-                    drawLine(
-                        color = strokeColor,
-                        start = Offset(x, 0f),
-                        end = Offset(x, size.height),
-                        strokeWidth = strokeWidth,
-                    )
-                    x += spacingPx
-                }
-                var y = spacingPx
-                while (y < size.height) {
-                    drawLine(
-                        color = strokeColor,
-                        start = Offset(0f, y),
-                        end = Offset(size.width, y),
-                        strokeWidth = strokeWidth,
-                    )
-                    y += spacingPx
-                }
-            }
-            PagePattern.DOTS -> {
-                var x = spacingPx
-                while (x < size.width) {
+            when (background.pattern) {
+                PagePattern.LINES -> {
                     var y = spacingPx
                     while (y < size.height) {
-                        drawCircle(
+                        drawLine(
                             color = strokeColor,
-                            radius = dotRadius,
-                            center = Offset(x, y),
+                            start = Offset(0f, y),
+                            end = Offset(size.width, y),
+                            strokeWidth = strokeWidth,
                         )
                         y += spacingPx
                     }
-                    x += spacingPx
                 }
+                PagePattern.GRID -> {
+                    var x = spacingPx
+                    while (x < size.width) {
+                        drawLine(
+                            color = strokeColor,
+                            start = Offset(x, 0f),
+                            end = Offset(x, size.height),
+                            strokeWidth = strokeWidth,
+                        )
+                        x += spacingPx
+                    }
+                    var y = spacingPx
+                    while (y < size.height) {
+                        drawLine(
+                            color = strokeColor,
+                            start = Offset(0f, y),
+                            end = Offset(size.width, y),
+                            strokeWidth = strokeWidth,
+                        )
+                        y += spacingPx
+                    }
+                }
+                PagePattern.DOTS -> {
+                    var x = spacingPx
+                    while (x < size.width) {
+                        var y = spacingPx
+                        while (y < size.height) {
+                            drawCircle(
+                                color = strokeColor,
+                                radius = dotRadius,
+                                center = Offset(x, y),
+                            )
+                            y += spacingPx
+                        }
+                        x += spacingPx
+                    }
+                }
+                PagePattern.NONE -> {}
             }
-            PagePattern.NONE -> {}
         }
     }
 }

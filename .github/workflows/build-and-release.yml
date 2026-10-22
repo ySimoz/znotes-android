@@ -1,0 +1,113 @@
+name: Build & Release APK
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release tag name (e.g. v0.9.4-dev or leave empty for dev-latest)'
+        required: false
+        default: ''
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK and CMake
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager --install "ndk;27.0.12077973" "cmake;3.22.1"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug
+
+      - name: Build Release APK
+        run: ./gradlew assembleRelease
+
+      - name: Prepare APK outputs
+        id: prepare_apks
+        run: |
+          mkdir -p release-apks
+          VERSION_NAME=$(grep 'versionName = "' app/build.gradle.kts | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
+          
+          # Copy debug APK (pre-signed with Android debug key, ready to install immediately)
+          cp app/build/outputs/apk/debug/app-debug.apk release-apks/znotes-${VERSION_NAME}-debug.apk
+          
+          # Copy release APK
+          cp app/build/outputs/apk/release/app-release.apk release-apks/znotes-${VERSION_NAME}-release-unsigned.apk
+          
+          ls -lh release-apks/
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: znotes-apks
+          path: release-apks/*
+          retention-days: 14
+
+      - name: Determine Release Tag
+        id: release_info
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG_NAME="${{ github.ref_name }}"
+            IS_PRERELEASE="false"
+          elif [ -n "${{ inputs.tag_name }}" ]; then
+            TAG_NAME="${{ inputs.tag_name }}"
+            IS_PRERELEASE="${{ inputs.prerelease }}"
+          elif [ "${{ github.ref_name }}" = "dev" ]; then
+            TAG_NAME="dev-latest"
+            IS_PRERELEASE="true"
+          else
+            TAG_NAME="v${{ env.VERSION_NAME }}-${{ github.ref_name }}"
+            IS_PRERELEASE="true"
+          fi
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+
+      - name: Create / Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref_type == 'tag' || github.ref_name == 'dev' || github.event_name == 'workflow_dispatch'
+        with:
+          tag_name: ${{ steps.release_info.outputs.tag_name }}
+          name: ${{ steps.release_info.outputs.tag_name == 'dev-latest' && 'zNotes Dev Latest' || steps.release_info.outputs.tag_name }}
+          prerelease: ${{ steps.release_info.outputs.is_prerelease == 'true' }}
+          generate_release_notes: true
+          files: release-apks/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

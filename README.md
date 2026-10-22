@@ -26,6 +26,9 @@
 
 Enhancements introduced in this fork:
 
+- **Collapsible & Auto-Hiding Toolbar**: Option in Preferences → Toolbar to auto-hide the toolbar while inking (reappears 1.2s after lifting the stylus). Dedicated manual collapse chevron and floating corner expand pill with smooth GPU-accelerated fade and rock-solid stationary page coordinates (0px displacement).
+- **Gesture Toolbar Toggle**: Bind two-finger tap, three-finger tap, or stylus gestures directly to show/hide the toolbar.
+- **Full-Window Canvas & Note Creation**: Distraction-free full-window modal creation sheets for both notebooks and infinite canvases with real-time pattern and palette previews.
 - **Multi-Note Tab Bar & Switcher**: Open, view, and switch between multiple notes simultaneously without tearing down the OpenGL canvas context.
 - **Folder Tree Sidebar**: Interactive hierarchical folder navigation in the backstage drawer with drag-and-drop file organization.
 - **Unified 3-Dots Folder Actions**: Context menu on folders across all explorer views (Gallery, Grid, Columns, and sidebar Folder Tree).

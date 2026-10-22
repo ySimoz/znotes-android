@@ -130,6 +130,7 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.material.icons.extended)
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.play.services.auth)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.pdfbox.android)
     implementation(libs.androidsvg)

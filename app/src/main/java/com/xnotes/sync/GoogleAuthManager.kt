@@ -4,6 +4,13 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Base64
+import com.google.android.gms.auth.GoogleAuthUtil
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.Scope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -23,43 +30,133 @@ object GoogleAuthManager {
     private const val KEY_USER_NAME = "user_name"
     private const val KEY_CODE_VERIFIER = "code_verifier"
 
-    const val REDIRECT_URI = "com.xnotes://oauth2redirect"
-    const val SCOPES = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile"
+    const val DRIVE_SCOPE_STR = "https://www.googleapis.com/auth/drive.file"
+    val DRIVE_SCOPE = Scope(DRIVE_SCOPE_STR)
 
-    // Default OAuth client ID for zNotes; users can optionally supply their own in Settings
-    const val DEFAULT_CLIENT_ID = "615967008128-4n3k6p5t7q7v8a9b1c2d3e4f5g6h7i8j.apps.googleusercontent.com"
+    const val REDIRECT_URI = "com.xnotes://oauth2redirect"
+    const val SCOPES = "$DRIVE_SCOPE_STR https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile"
 
     private fun getPrefs(context: Context) = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
+    fun getSignInOptions(): GoogleSignInOptions =
+        GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestEmail()
+            .requestProfile()
+            .requestScopes(DRIVE_SCOPE)
+            .build()
+
+    fun getSignInClient(context: Context): GoogleSignInClient =
+        GoogleSignIn.getClient(context, getSignInOptions())
+
+    fun getSignInIntent(context: Context): Intent =
+        getSignInClient(context).signInIntent
+
     fun isConnected(context: Context): Boolean {
+        val account = GoogleSignIn.getLastSignedInAccount(context)
+        if (account != null && GoogleSignIn.hasPermissions(account, DRIVE_SCOPE)) {
+            return true
+        }
         val prefs = getPrefs(context)
         return !prefs.getString(KEY_REFRESH_TOKEN, null).isNullOrEmpty()
     }
 
-    fun getUserEmail(context: Context): String? = getPrefs(context).getString(KEY_USER_EMAIL, null)
-    fun getUserName(context: Context): String? = getPrefs(context).getString(KEY_USER_NAME, null)
+    fun getUserEmail(context: Context): String? {
+        val account = GoogleSignIn.getLastSignedInAccount(context)
+        if (account != null) return account.email
+        return getPrefs(context).getString(KEY_USER_EMAIL, null)
+    }
 
-    fun createAuthIntent(context: Context, customClientId: String? = null): Intent {
-        val clientId = customClientId?.ifEmpty { null } ?: DEFAULT_CLIENT_ID
-        val verifier = generateCodeVerifier()
-        val challenge = generateCodeChallenge(verifier)
+    fun getUserName(context: Context): String? {
+        val account = GoogleSignIn.getLastSignedInAccount(context)
+        if (account != null) return account.displayName ?: account.email
+        return getPrefs(context).getString(KEY_USER_NAME, null)
+    }
 
-        getPrefs(context).edit().putString(KEY_CODE_VERIFIER, verifier).apply()
-
-        val authUrl = Uri.parse("https://accounts.google.com/o/oauth2/v2/auth").buildUpon()
-            .appendQueryParameter("client_id", clientId)
-            .appendQueryParameter("redirect_uri", REDIRECT_URI)
-            .appendQueryParameter("response_type", "code")
-            .appendQueryParameter("scope", SCOPES)
-            .appendQueryParameter("code_challenge", challenge)
-            .appendQueryParameter("code_challenge_method", "S256")
-            .appendQueryParameter("access_type", "offline")
-            .appendQueryParameter("prompt", "consent")
-            .build()
-
-        return Intent(Intent.ACTION_VIEW, authUrl).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    suspend fun handleSignInResult(context: Context, intent: Intent?): Result<Pair<String, String>> = withContext(Dispatchers.IO) {
+        try {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(intent)
+            val account = task.getResult(ApiException::class.java)
+            val email = account.email ?: "Google Account"
+            val name = account.displayName ?: email
+            getPrefs(context).edit().apply {
+                putString(KEY_USER_EMAIL, email)
+                putString(KEY_USER_NAME, name)
+            }.apply()
+            Result.success(email to name)
+        } catch (e: Exception) {
+            Result.failure(e)
         }
+    }
+
+    suspend fun getValidAccessToken(context: Context, customClientId: String? = null): String? = withContext(Dispatchers.IO) {
+        // 1. Try Google Play Services native token retrieval
+        val nativeAccount = GoogleSignIn.getLastSignedInAccount(context)
+        if (nativeAccount != null && GoogleSignIn.hasPermissions(nativeAccount, DRIVE_SCOPE)) {
+            val gAccount = nativeAccount.account
+            if (gAccount != null) {
+                try {
+                    val token = GoogleAuthUtil.getToken(context, gAccount, "oauth2:$DRIVE_SCOPE_STR")
+                    if (!token.isNullOrEmpty()) return@withContext token
+                } catch (e: Exception) {
+                    // Fall through to manual token cache if Play Services token call fails
+                }
+            }
+        }
+
+        // 2. Fall back to manual OAuth SharedPreferences cache
+        val prefs = getPrefs(context)
+        val expiresAt = prefs.getLong(KEY_EXPIRES_AT, 0L)
+        val currentToken = prefs.getString(KEY_ACCESS_TOKEN, null)
+
+        if (!currentToken.isNullOrEmpty() && System.currentTimeMillis() + 60_000L < expiresAt) {
+            return@withContext currentToken
+        }
+
+        val refreshToken = prefs.getString(KEY_REFRESH_TOKEN, null) ?: return@withContext null
+        if (customClientId.isNullOrEmpty()) return@withContext null
+
+        try {
+            val params = mapOf(
+                "client_id" to customClientId,
+                "refresh_token" to refreshToken,
+                "grant_type" to "refresh_token",
+            )
+            val tokenResp = postForm("https://oauth2.googleapis.com/token", params)
+            val json = JSONObject(tokenResp)
+            val newAccessToken = json.getString("access_token")
+            val expiresIn = json.getLong("expires_in")
+            val newExpiresAt = System.currentTimeMillis() + (expiresIn * 1000L)
+
+            prefs.edit().apply {
+                putString(KEY_ACCESS_TOKEN, newAccessToken)
+                putLong(KEY_EXPIRES_AT, newExpiresAt)
+            }.apply()
+
+            newAccessToken
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun invalidateToken(context: Context, token: String) {
+        try {
+            GoogleAuthUtil.clearToken(context, token)
+        } catch (_: Exception) {}
+        getPrefs(context).edit().remove(KEY_ACCESS_TOKEN).apply()
+    }
+
+    suspend fun signOut(context: Context) = withContext(Dispatchers.IO) {
+        try {
+            getSignInClient(context).signOut()
+        } catch (_: Exception) {}
+        val prefs = getPrefs(context)
+        val token = prefs.getString(KEY_ACCESS_TOKEN, null)
+        if (!token.isNullOrEmpty()) {
+            try {
+                postForm("https://oauth2.googleapis.com/revoke", mapOf("token" to token))
+            } catch (_: Exception) {}
+        }
+        prefs.edit().clear().apply()
     }
 
     suspend fun handleRedirect(context: Context, uri: Uri, customClientId: String? = null): Result<Pair<String, String>> = withContext(Dispatchers.IO) {
@@ -71,7 +168,8 @@ object GoogleAuthManager {
             val verifier = prefs.getString(KEY_CODE_VERIFIER, null)
                 ?: return@withContext Result.failure(IllegalStateException("No code verifier found"))
 
-            val clientId = customClientId?.ifEmpty { null } ?: DEFAULT_CLIENT_ID
+            val clientId = customClientId?.ifEmpty { null }
+                ?: return@withContext Result.failure(IllegalStateException("Custom client ID required for browser flow"))
 
             val params = mapOf(
                 "client_id" to clientId,
@@ -104,54 +202,6 @@ object GoogleAuthManager {
         } catch (e: Exception) {
             Result.failure(e)
         }
-    }
-
-    suspend fun getValidAccessToken(context: Context, customClientId: String? = null): String? = withContext(Dispatchers.IO) {
-        val prefs = getPrefs(context)
-        val expiresAt = prefs.getLong(KEY_EXPIRES_AT, 0L)
-        val currentToken = prefs.getString(KEY_ACCESS_TOKEN, null)
-
-        // Return current token if it has at least 60 seconds of validity remaining
-        if (!currentToken.isNullOrEmpty() && System.currentTimeMillis() + 60_000L < expiresAt) {
-            return@withContext currentToken
-        }
-
-        // Token expired; attempt refresh
-        val refreshToken = prefs.getString(KEY_REFRESH_TOKEN, null) ?: return@withContext null
-        val clientId = customClientId?.ifEmpty { null } ?: DEFAULT_CLIENT_ID
-
-        try {
-            val params = mapOf(
-                "client_id" to clientId,
-                "refresh_token" to refreshToken,
-                "grant_type" to "refresh_token",
-            )
-            val tokenResp = postForm("https://oauth2.googleapis.com/token", params)
-            val json = JSONObject(tokenResp)
-            val newAccessToken = json.getString("access_token")
-            val expiresIn = json.getLong("expires_in")
-            val newExpiresAt = System.currentTimeMillis() + (expiresIn * 1000L)
-
-            prefs.edit().apply {
-                putString(KEY_ACCESS_TOKEN, newAccessToken)
-                putLong(KEY_EXPIRES_AT, newExpiresAt)
-            }.apply()
-
-            newAccessToken
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    suspend fun signOut(context: Context) = withContext(Dispatchers.IO) {
-        val prefs = getPrefs(context)
-        val token = prefs.getString(KEY_ACCESS_TOKEN, null)
-        if (!token.isNullOrEmpty()) {
-            try {
-                postForm("https://oauth2.googleapis.com/revoke", mapOf("token" to token))
-            } catch (_: Exception) { }
-        }
-        prefs.edit().clear().apply()
     }
 
     private fun fetchUserInfo(accessToken: String): Pair<String, String> {
@@ -188,18 +238,5 @@ object GoogleAuthManager {
             val err = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "HTTP ${conn.responseCode}"
             throw IllegalStateException("HTTP ${conn.responseCode}: $err")
         }
-    }
-
-    private fun generateCodeVerifier(): String {
-        val bytes = ByteArray(48)
-        SecureRandom().nextBytes(bytes)
-        return Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
-    }
-
-    private fun generateCodeChallenge(verifier: String): String {
-        val bytes = verifier.toByteArray(Charsets.US_ASCII)
-        val md = MessageDigest.getInstance("SHA-256")
-        val digest = md.digest(bytes)
-        return Base64.encodeToString(digest, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
     }
 }

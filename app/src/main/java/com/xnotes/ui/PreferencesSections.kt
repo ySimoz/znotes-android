@@ -707,6 +707,20 @@ internal fun CloudSyncPreferencesSection(
     val userEmail = com.xnotes.sync.GoogleAuthManager.getUserEmail(context) ?: sync.accountEmail
     val userName = com.xnotes.sync.GoogleAuthManager.getUserName(context) ?: sync.accountName
 
+    val signInLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        scope.launch {
+            val res = com.xnotes.sync.GoogleAuthManager.handleSignInResult(context, result.data)
+            res.onSuccess { (email, name) ->
+                val updated = sync.copy(enabled = true, accountEmail = email, accountName = name)
+                onUpdate(prefs.copy(driveSync = updated))
+                com.xnotes.sync.DriveSyncScheduler.schedule(context, updated)
+                com.xnotes.sync.DriveSyncScheduler.triggerImmediate(context)
+            }
+        }
+    }
+
     HorizontalDivider(color = palette.border.toComposeColor())
     SectionTitle(stringResource(R.string.pref_section_cloud_sync))
     Text(
@@ -718,7 +732,7 @@ internal fun CloudSyncPreferencesSection(
     if (!isConnected) {
         androidx.compose.material3.Button(
             onClick = {
-                context.startActivity(com.xnotes.sync.GoogleAuthManager.createAuthIntent(context, sync.customClientId))
+                signInLauncher.launch(com.xnotes.sync.GoogleAuthManager.getSignInIntent(context))
             },
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
         ) {

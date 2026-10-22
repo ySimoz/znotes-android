@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <!-- The infinite canvas renders on GLES 3.0. Not required: the paged notebook does not use
          it, so a device without it keeps the rest of the app. -->
     <uses-feature android:glEsVersion="0x00030000" android:required="false" />
@@ -47,6 +50,13 @@
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="application/pdf" />
+            </intent-filter>
+            <!-- Google Drive OAuth2 redirect callback -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.xnotes" android:host="oauth2redirect" />
             </intent-filter>
         </activity>
 

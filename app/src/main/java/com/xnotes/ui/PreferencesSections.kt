@@ -28,7 +28,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -690,4 +692,156 @@ internal fun ToolbarPreferencesSection(
         onSectionCancel = onClearDrag,
     )
     Spacer(Modifier.size(8.dp))
+}
+
+@Composable
+internal fun CloudSyncPreferencesSection(
+    prefs: Preferences,
+    onUpdate: (Preferences) -> Unit,
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    val palette = LocalPalette.current
+    val sync = prefs.driveSync
+    val isConnected = com.xnotes.sync.GoogleAuthManager.isConnected(context)
+    val userEmail = com.xnotes.sync.GoogleAuthManager.getUserEmail(context) ?: sync.accountEmail
+    val userName = com.xnotes.sync.GoogleAuthManager.getUserName(context) ?: sync.accountName
+
+    HorizontalDivider(color = palette.border.toComposeColor())
+    SectionTitle(stringResource(R.string.pref_section_cloud_sync))
+    Text(
+        text = stringResource(R.string.drive_sync_desc),
+        color = palette.textDim.toComposeColor(),
+        fontSize = 12.sp,
+    )
+
+    if (!isConnected) {
+        androidx.compose.material3.Button(
+            onClick = {
+                context.startActivity(com.xnotes.sync.GoogleAuthManager.createAuthIntent(context, sync.customClientId))
+            },
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        ) {
+            Text(stringResource(R.string.drive_connect))
+        }
+    } else {
+        // Connected Account Card
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.medium)
+                .background(palette.panel.toComposeColor())
+                .border(1.dp, palette.border.toComposeColor(), MaterialTheme.shapes.medium)
+                .padding(12.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column {
+                        if (!userName.isNullOrEmpty()) {
+                            Text(userName, color = palette.text.toComposeColor(), fontSize = 14.sp)
+                        }
+                        Text(userEmail ?: "Google Drive", color = palette.textDim.toComposeColor(), fontSize = 12.sp)
+                    }
+                    TextButton(
+                        onClick = {
+                            val updated = sync.copy(enabled = false, accountEmail = null, accountName = null)
+                            onUpdate(prefs.copy(driveSync = updated))
+                            com.xnotes.sync.DriveSyncScheduler.cancel(context)
+                            scope.launch {
+                                com.xnotes.sync.GoogleAuthManager.signOut(context)
+                            }
+                        }
+                    ) {
+                        Text(stringResource(R.string.drive_disconnect), color = palette.accent.toComposeColor())
+                    }
+                }
+
+                val lastSyncFormatted = if (sync.lastSyncTime > 0) {
+                    val diff = System.currentTimeMillis() - sync.lastSyncTime
+                    when {
+                        diff < 60_000L -> "Just now"
+                        diff < 3600_000L -> "${diff / 60_000L}m ago"
+                        diff < 86400_000L -> "${diff / 3600_000L}h ago"
+                        else -> java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(sync.lastSyncTime))
+                    }
+                } else {
+                    stringResource(R.string.drive_never_synced)
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        stringResource(R.string.drive_last_synced, lastSyncFormatted),
+                        color = palette.textDim.toComposeColor(),
+                        fontSize = 11.sp,
+                    )
+                    androidx.compose.material3.Button(
+                        onClick = {
+                            com.xnotes.sync.DriveSyncScheduler.triggerImmediate(context)
+                        },
+                    ) {
+                        Text(stringResource(R.string.drive_sync_now), fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+
+        // Auto-sync master switch
+        CheckRow(stringResource(R.string.drive_sync_title), sync.enabled) {
+            val updated = sync.copy(enabled = it)
+            onUpdate(prefs.copy(driveSync = updated))
+            com.xnotes.sync.DriveSyncScheduler.schedule(context, updated)
+        }
+
+        if (sync.enabled) {
+            // Frequency dropdown
+            val freqOptions = listOf(
+                com.xnotes.sync.SyncFrequency.MINUTES_15.id to stringResource(R.string.drive_freq_15m),
+                com.xnotes.sync.SyncFrequency.HOURLY.id to stringResource(R.string.drive_freq_1h),
+                com.xnotes.sync.SyncFrequency.HOURS_3.id to stringResource(R.string.drive_freq_3h),
+                com.xnotes.sync.SyncFrequency.HOURS_6.id to stringResource(R.string.drive_freq_6h),
+                com.xnotes.sync.SyncFrequency.DAILY.id to stringResource(R.string.drive_freq_24h),
+                com.xnotes.sync.SyncFrequency.ON_SAVE.id to stringResource(R.string.drive_freq_on_save),
+            )
+            FieldLabel(stringResource(R.string.drive_sync_frequency))
+            OptionDropdown(freqOptions, sync.frequency.id) {
+                val updated = sync.copy(frequency = com.xnotes.sync.SyncFrequency.fromId(it))
+                onUpdate(prefs.copy(driveSync = updated))
+                com.xnotes.sync.DriveSyncScheduler.schedule(context, updated)
+            }
+
+            // Wi-Fi only
+            CheckRow(stringResource(R.string.drive_wifi_only), sync.wifiOnly) {
+                val updated = sync.copy(wifiOnly = it)
+                onUpdate(prefs.copy(driveSync = updated))
+                com.xnotes.sync.DriveSyncScheduler.schedule(context, updated)
+            }
+
+            // Only charging
+            CheckRow(stringResource(R.string.drive_only_charging), sync.onlyWhileCharging) {
+                val updated = sync.copy(onlyWhileCharging = it)
+                onUpdate(prefs.copy(driveSync = updated))
+                com.xnotes.sync.DriveSyncScheduler.schedule(context, updated)
+            }
+
+            // Deletion Policy
+            val delOptions = listOf(
+                com.xnotes.sync.DeletionPolicy.MOVE_TO_TRASH.id to stringResource(R.string.drive_del_trash),
+                com.xnotes.sync.DeletionPolicy.ALWAYS_ASK.id to stringResource(R.string.drive_del_ask),
+                com.xnotes.sync.DeletionPolicy.KEEP_ON_DRIVE.id to stringResource(R.string.drive_del_keep),
+            )
+            FieldLabel(stringResource(R.string.drive_deletion_policy))
+            OptionDropdown(delOptions, sync.deletionPolicy.id) {
+                val updated = sync.copy(deletionPolicy = com.xnotes.sync.DeletionPolicy.fromId(it))
+                onUpdate(prefs.copy(driveSync = updated))
+            }
+        }
+    }
 }

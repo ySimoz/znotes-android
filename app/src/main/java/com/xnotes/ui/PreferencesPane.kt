@@ -250,6 +250,7 @@ fun PreferencesPane(
                 onNameColor = { namingColor = it },
             )
             PdfExportPreferencesSection(prefs = prefs, onUpdateHome = ::updateHome)
+            CloudSyncPreferencesSection(prefs = prefs, onUpdate = ::update)
             PerformancePreferencesSection(prefs = prefs, onUpdate = ::update)
             if (editor.treeSitterAvailable) {
                 CodeHighlightingPreferencesSection(

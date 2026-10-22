@@ -270,6 +270,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        handleOAuthRedirect(intent)
+        editor?.let { ed ->
+            if (ed.preferences.driveSync.enabled) {
+                com.xnotes.sync.DriveSyncScheduler.schedule(this, ed.preferences.driveSync)
+            }
+        }
     }
 
     // Stylus side-button keys (Bluetooth/USI pens report the button only this way) are caught here,
@@ -305,6 +311,27 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         pdfImportUri(intent)?.let { pendingPdfImport = it }
+        handleOAuthRedirect(intent)
+    }
+
+    private fun handleOAuthRedirect(intent: Intent?) {
+        val uri = intent?.data ?: return
+        if (uri.scheme == "com.xnotes" && uri.host == "oauth2redirect") {
+            lifecycleScope.launch {
+                val ed = editor ?: return@launch
+                val result = com.xnotes.sync.GoogleAuthManager.handleRedirect(this@MainActivity, uri, ed.preferences.driveSync.customClientId)
+                result.onSuccess { (email, name) ->
+                    val updated = ed.preferences.driveSync.copy(
+                        enabled = true,
+                        accountEmail = email,
+                        accountName = name,
+                    )
+                    ed.applyPreferences(ed.preferences.copy(driveSync = updated))
+                    com.xnotes.sync.DriveSyncScheduler.schedule(this@MainActivity, updated)
+                    com.xnotes.sync.DriveSyncScheduler.triggerImmediate(this@MainActivity)
+                }
+            }
+        }
     }
 
     // The PDF uri carried by an inbound VIEW ("Open with") or SEND ("Share") intent, else null.

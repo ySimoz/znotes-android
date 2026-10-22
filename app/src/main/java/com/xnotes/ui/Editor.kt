@@ -847,6 +847,9 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             } else if (wasDirty && infiniteOrNull?.document === doc) {
                 doc.dirty = true // nothing was written; the edits are still unsaved
             }
+            if (res != null && settings.prefs.driveSync.enabled && settings.prefs.driveSync.frequency == com.xnotes.sync.SyncFrequency.ON_SAVE) {
+                com.xnotes.sync.DriveSyncScheduler.triggerImmediate(appContext)
+            }
             onDone?.invoke()
         }
     }
@@ -4982,6 +4985,9 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
                     " + saf ${state.lastSaveCopyMs}" +
                     ", ${state.lastSaveBytes} bytes, ${res != null}",
             )
+            if (res != null && settings.prefs.driveSync.enabled && settings.prefs.driveSync.frequency == com.xnotes.sync.SyncFrequency.ON_SAVE) {
+                com.xnotes.sync.DriveSyncScheduler.triggerImmediate(appContext)
+            }
             onDone?.invoke()
         }
     }

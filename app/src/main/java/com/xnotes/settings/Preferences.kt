@@ -117,6 +117,7 @@ data class Preferences(
     val showExtensions: Boolean = false,
     /** Whether an exported PDF gets a bookmark for each heading of the note's text. */
     val pdfHeadingBookmarks: Boolean = true,
+    val driveSync: com.xnotes.sync.DriveSyncPreferences = com.xnotes.sync.DriveSyncPreferences(),
 ) {
     /**
      * A new note's page size in document pixels. A named size is laid out under
@@ -130,6 +131,7 @@ data class Preferences(
         get() = PageSizeChoice(defaultPageSize, defaultPageOrientation, customPageWidthMm, customPageHeightMm)
 
     fun toJson(): JSONObject = JSONObject()
+        .put("drive_sync", driveSync.toJson())
         .put("ui_appearance", uiAppearance)
         .put("hide_window_decoration", hideWindowDecoration)
         .put("page_color", pageColor?.let { Rgba.toHex(it) } ?: JSONObject.NULL)
@@ -314,6 +316,7 @@ data class Preferences(
                 showFolderCounts = o.optBoolean("show_folder_counts", true),
                 showExtensions = o.optBoolean("show_extensions", false),
                 pdfHeadingBookmarks = o.optBoolean("pdf_heading_bookmarks", true),
+                driveSync = com.xnotes.sync.DriveSyncPreferences.fromJson(o.optJSONObject("drive_sync")),
             )
         }
     }

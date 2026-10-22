@@ -18,7 +18,7 @@ class DriveSyncWorker(
             val browseRoot = settingsJson.optString("browse_root").ifEmpty { null }
             val syncPrefs = DriveSyncPreferences.fromJson(prefsJson?.optJSONObject("drive_sync"))
 
-            if (!syncPrefs.enabled || !GoogleAuthManager.isConnected(applicationContext)) {
+            if (!GoogleAuthManager.isConnected(applicationContext)) {
                 return Result.success()
             }
 

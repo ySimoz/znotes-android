@@ -5,9 +5,11 @@ import android.net.Uri
 import com.xnotes.core.model.Page
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.resolvedPageColor
+import com.xnotes.format.CanvasCodec
 import com.xnotes.format.DocumentCodec
 import com.xnotes.platform.AndroidImageCodec
 import com.xnotes.platform.AndroidTextMeasurer
+import com.xnotes.platform.CanvasPdfExporter
 import com.xnotes.platform.PdfExporter
 import com.xnotes.platform.PdfSource
 import kotlinx.coroutines.Dispatchers
@@ -42,13 +44,13 @@ class DriveSyncEngine(private val context: Context) {
         val localItems = scanner.scan(browseRoot, prefs.syncScope, prefs.selectedFolders)
         val ledgerMap = ledger.getAll()
 
-        // Map target remote relative path (e.g. "Math/Lecture1.pdf") -> local item
+        // Map target remote relative path (e.g. "Algebra/Esercizi.pdf") -> local item
         val targetPathToLocal = mutableMapOf<String, SyncItem>()
         for (item in localItems) {
-            val remoteRelPath = if (item.isNote) {
-                item.relativePath.removeSuffix(".note") + ".pdf"
-            } else {
-                item.relativePath
+            val remoteRelPath = when {
+                item.isNote -> item.relativePath.removeSuffix(".xnote").removeSuffix(".note") + ".pdf"
+                item.isCanvas -> item.relativePath.removeSuffix(".xcanvas") + ".pdf"
+                else -> item.relativePath
             }
             targetPathToLocal[remoteRelPath] = item
         }
@@ -81,6 +83,15 @@ class DriveSyncEngine(private val context: Context) {
             }
         }
 
+        if (toSync.isEmpty()) {
+            return@withContext SyncResult(
+                success = true,
+                message = if (deletedCount > 0) "Cleaned up $deletedCount deleted files" else "Up to date",
+                syncedCount = 0,
+                deletedCount = deletedCount,
+            )
+        }
+
         var syncedCount = 0
         var errorCount = 0
         val tempDir = File(context.cacheDir, "sync_pdf_temps").apply { mkdirs() }
@@ -104,16 +115,25 @@ class DriveSyncEngine(private val context: Context) {
 
                 try {
                     // Prepare PDF content
-                    if (item.isNote) {
-                        openInputStream(item).use { inStream ->
-                            if (inStream == null) throw IllegalStateException("Cannot read ${item.name}")
-                            compileNoteToPdf(inStream, tempPdfFile)
+                    when {
+                        item.isNote -> {
+                            openInputStream(item).use { inStream ->
+                                if (inStream == null) throw IllegalStateException("Cannot read ${item.name}")
+                                compileNoteToPdf(inStream, tempPdfFile)
+                            }
                         }
-                    } else {
-                        // Plain PDF copy
-                        openInputStream(item).use { inStream ->
-                            if (inStream == null) throw IllegalStateException("Cannot read ${item.name}")
-                            FileOutputStream(tempPdfFile).use { out -> inStream.copyTo(out) }
+                        item.isCanvas -> {
+                            openInputStream(item).use { inStream ->
+                                if (inStream == null) throw IllegalStateException("Cannot read ${item.name}")
+                                compileCanvasToPdf(inStream, tempPdfFile)
+                            }
+                        }
+                        else -> {
+                            // Plain PDF copy
+                            openInputStream(item).use { inStream ->
+                                if (inStream == null) throw IllegalStateException("Cannot read ${item.name}")
+                                FileOutputStream(tempPdfFile).use { out -> inStream.copyTo(out) }
+                            }
                         }
                     }
 
@@ -140,39 +160,38 @@ class DriveSyncEngine(private val context: Context) {
                     if (tempPdfFile.exists()) tempPdfFile.delete()
                 }
             } catch (e: Exception) {
-                errorCount++
                 android.util.Log.e("DriveSyncEngine", "Failed to sync $remoteRelPath", e)
+                errorCount++
             }
         }
 
-        val msg = when {
-            errorCount > 0 -> "Synced $syncedCount, $errorCount errors"
-            syncedCount == 0 && deletedCount == 0 -> "Up to date"
-            else -> "Synced $syncedCount notes" + (if (deletedCount > 0) ", $deletedCount deleted" else "")
-        }
+        val success = errorCount == 0
+        val summary = "Synced $syncedCount note${if (syncedCount != 1) "s" else ""}" +
+            if (errorCount > 0) " ($errorCount failed)" else ""
 
         SyncResult(
-            success = errorCount == 0,
+            success = success,
+            message = summary,
             syncedCount = syncedCount,
             deletedCount = deletedCount,
             errorCount = errorCount,
-            message = msg,
         )
     }
 
     private fun openInputStream(item: SyncItem): InputStream? {
-        return if (item.file != null) {
-            item.file.inputStream()
-        } else if (item.uri != null) {
+        return if (item.uri != null) {
             context.contentResolver.openInputStream(item.uri)
+        } else if (item.file != null) {
+            item.file.inputStream()
         } else null
     }
 
+    private val imageCodec by lazy { AndroidImageCodec() }
+    private val textMeasurer by lazy { AndroidTextMeasurer() }
+
     private fun compileNoteToPdf(inputStream: InputStream, outputFile: File) {
-        val pdfDir = File(context.cacheDir, "sync_pdf_sources").apply { mkdirs() }
-        val imageDir = File(context.cacheDir, "sync_img_sources").apply { mkdirs() }
-        val imageCodec = AndroidImageCodec()
-        val textMeasurer = AndroidTextMeasurer()
+        val pdfDir = File(context.cacheDir, "note_sync_pdfs").apply { mkdirs() }
+        val imageDir = File(context.cacheDir, "note_sync_imgs").apply { mkdirs() }
         val codec = DocumentCodec(imageCodec, textMeasurer)
 
         val doc = codec.read(inputStream, pdfDir, imageDir)
@@ -192,6 +211,26 @@ class DriveSyncEngine(private val context: Context) {
         } finally {
             source?.close()
             doc.pdfFile?.delete()
+            pdfDir.deleteRecursively()
+            imageDir.deleteRecursively()
+        }
+    }
+
+    private fun compileCanvasToPdf(inputStream: InputStream, outputFile: File) {
+        val imageDir = File(context.cacheDir, "canvas_sync_imgs").apply { mkdirs() }
+        val codec = CanvasCodec(imageCodec, textMeasurer)
+        val doc = codec.read(inputStream, imageDir)
+        try {
+            outputFile.outputStream().use { out ->
+                CanvasPdfExporter.export(
+                    context = context,
+                    doc = doc,
+                    out = out,
+                    paperColor = doc.background.paperColor ?: Rgba(255, 255, 255),
+                )
+            }
+        } finally {
+            imageDir.deleteRecursively()
         }
     }
 }

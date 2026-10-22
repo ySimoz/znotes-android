@@ -13,6 +13,7 @@ data class SyncItem(
     val file: File?,
     val lastModified: Long,
     val isNote: Boolean,
+    val isCanvas: Boolean,
     val isPdf: Boolean,
 )
 
@@ -74,9 +75,10 @@ class DriveSyncScanner(private val context: Context) {
                             scanSafDirectory(treeUri, docId, rel, syncScope, selectedFolders, out)
                         }
                     } else {
-                        val isNote = name.endsWith(".note", ignoreCase = true)
+                        val isNote = name.endsWith(".xnote", ignoreCase = true) || name.endsWith(".note", ignoreCase = true)
+                        val isCanvas = name.endsWith(".xcanvas", ignoreCase = true)
                         val isPdf = name.endsWith(".pdf", ignoreCase = true)
-                        if (isNote || isPdf) {
+                        if (isNote || isCanvas || isPdf) {
                             if (syncScope == SyncScope.ALL || isFolderIncluded(currentPath, selectedFolders)) {
                                 val itemUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
                                 out.add(
@@ -87,6 +89,7 @@ class DriveSyncScanner(private val context: Context) {
                                         file = null,
                                         lastModified = mtime,
                                         isNote = isNote,
+                                        isCanvas = isCanvas,
                                         isPdf = isPdf,
                                     )
                                 )
@@ -119,9 +122,10 @@ class DriveSyncScanner(private val context: Context) {
                     scanLocalFile(f, rel, syncScope, selectedFolders, out)
                 }
             } else {
-                val isNote = name.endsWith(".note", ignoreCase = true)
+                val isNote = name.endsWith(".xnote", ignoreCase = true) || name.endsWith(".note", ignoreCase = true)
+                val isCanvas = name.endsWith(".xcanvas", ignoreCase = true)
                 val isPdf = name.endsWith(".pdf", ignoreCase = true)
-                if (isNote || isPdf) {
+                if (isNote || isCanvas || isPdf) {
                     if (syncScope == SyncScope.ALL || isFolderIncluded(currentPath, selectedFolders)) {
                         out.add(
                             SyncItem(
@@ -131,6 +135,7 @@ class DriveSyncScanner(private val context: Context) {
                                 file = f,
                                 lastModified = f.lastModified(),
                                 isNote = isNote,
+                                isCanvas = isCanvas,
                                 isPdf = isPdf,
                             )
                         )

@@ -707,6 +707,9 @@ internal fun CloudSyncPreferencesSection(
     val userEmail = com.xnotes.sync.GoogleAuthManager.getUserEmail(context) ?: sync.accountEmail
     val userName = com.xnotes.sync.GoogleAuthManager.getUserName(context) ?: sync.accountName
 
+    var isSyncing by remember { mutableStateOf(false) }
+    var syncProgressMsg by remember { mutableStateOf<String?>(null) }
+
     val signInLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -791,17 +794,65 @@ internal fun CloudSyncPreferencesSection(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        stringResource(R.string.drive_last_synced, lastSyncFormatted),
-                        color = palette.textDim.toComposeColor(),
-                        fontSize = 11.sp,
-                    )
+                    Column(modifier = Modifier.weight(1f, fill = false).padding(end = 8.dp)) {
+                        Text(
+                            stringResource(R.string.drive_last_synced, lastSyncFormatted),
+                            color = palette.textDim.toComposeColor(),
+                            fontSize = 11.sp,
+                        )
+                        val status = sync.lastSyncStatus
+                        if (!status.isNullOrEmpty()) {
+                            Text(
+                                status,
+                                color = palette.textDim.toComposeColor(),
+                                fontSize = 10.sp,
+                                maxLines = 1,
+                            )
+                        }
+                    }
                     androidx.compose.material3.Button(
                         onClick = {
-                            com.xnotes.sync.DriveSyncScheduler.triggerImmediate(context)
+                            if (isSyncing) return@Button
+                            isSyncing = true
+                            syncProgressMsg = "Starting sync..."
+                            scope.launch {
+                                try {
+                                    val settingsJson = com.xnotes.platform.JsonStore.settings(context).read()
+                                    val browseRoot = settingsJson.optString("browse_root").ifEmpty { null }
+                                    val engine = com.xnotes.sync.DriveSyncEngine(context)
+                                    val result = engine.sync(sync, browseRoot) { current, total, name ->
+                                        syncProgressMsg = "$current/$total: $name"
+                                    }
+                                    val updated = sync.copy(
+                                        lastSyncTime = System.currentTimeMillis(),
+                                        lastSyncStatus = result.message,
+                                    )
+                                    onUpdate(prefs.copy(driveSync = updated))
+                                    android.widget.Toast.makeText(context, result.message, android.widget.Toast.LENGTH_SHORT).show()
+                                } catch (e: Exception) {
+                                    val msg = "Sync failed: ${e.message}"
+                                    val updated = sync.copy(lastSyncStatus = msg)
+                                    onUpdate(prefs.copy(driveSync = updated))
+                                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+                                } finally {
+                                    isSyncing = false
+                                    syncProgressMsg = null
+                                }
+                            }
                         },
+                        enabled = !isSyncing,
                     ) {
-                        Text(stringResource(R.string.drive_sync_now), fontSize = 12.sp)
+                        if (isSyncing) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp,
+                                color = palette.onAccent.toComposeColor(),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(syncProgressMsg ?: "Syncing...", fontSize = 11.sp)
+                        } else {
+                            Text(stringResource(R.string.drive_sync_now), fontSize = 12.sp)
+                        }
                     }
                 }
             }

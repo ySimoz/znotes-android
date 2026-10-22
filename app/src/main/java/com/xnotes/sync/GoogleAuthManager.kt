@@ -92,15 +92,19 @@ object GoogleAuthManager {
         // 1. Try Google Play Services native token retrieval
         val nativeAccount = GoogleSignIn.getLastSignedInAccount(context)
         if (nativeAccount != null && GoogleSignIn.hasPermissions(nativeAccount, DRIVE_SCOPE)) {
-            val gAccount = nativeAccount.account
+            val gAccount = nativeAccount.account ?: nativeAccount.email?.let { android.accounts.Account(it, "com.google") }
             if (gAccount != null) {
                 try {
                     val token = GoogleAuthUtil.getToken(context, gAccount, "oauth2:$DRIVE_SCOPE_STR")
                     if (!token.isNullOrEmpty()) return@withContext token
                 } catch (e: Exception) {
-                    // Fall through to manual token cache if Play Services token call fails
+                    android.util.Log.e("GoogleAuthManager", "GoogleAuthUtil.getToken failed", e)
                 }
+            } else {
+                android.util.Log.e("GoogleAuthManager", "Both nativeAccount.account and nativeAccount.email are null")
             }
+        } else {
+            android.util.Log.e("GoogleAuthManager", "nativeAccount is null or lacks permissions: $nativeAccount")
         }
 
         // 2. Fall back to manual OAuth SharedPreferences cache

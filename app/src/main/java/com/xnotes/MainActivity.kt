@@ -1308,7 +1308,7 @@ private fun EditorPane(
             )
         }
         androidx.compose.animation.AnimatedVisibility(
-            visible = !editor.canvasOpen && !editor.fullscreen && editor.tabManager.count > 0,
+            visible = !editor.canvasOpen && !editor.fullscreen && editor.toolbarVisible && editor.tabManager.count > 0,
             enter = androidx.compose.animation.expandVertically(),
             exit = androidx.compose.animation.shrinkVertically(),
         ) {
@@ -1330,7 +1330,12 @@ private fun EditorPane(
                     onClosePane = onClose,
                 )
             }
-            ToolbarAround(bar, onCover = canvas::setToolbarCover) { floatingBar ->
+            ToolbarAround(
+                bar = bar,
+                visible = canvas.toolbarVisible,
+                onToggleVisible = { canvas.toggleToolbar() },
+                onCover = canvas::setToolbarCover,
+            ) { floatingBar ->
                 Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
                     AndroidView(
                         factory = { detached(canvas.surfaces) },
@@ -1360,7 +1365,12 @@ private fun EditorPane(
                     onOpenBeside = actions.onOpenBeside,
                 )
             }
-            ToolbarAround(bar, onCover = editor::setToolbarCover) { floatingBar ->
+            ToolbarAround(
+                bar = bar,
+                visible = editor.toolbarVisible,
+                onToggleVisible = { editor.toggleToolbar() },
+                onCover = editor::setToolbarCover,
+            ) { floatingBar ->
                 Row(modifier = Modifier.fillMaxSize()) {
                     if (editor.sidebarVisible) {
                         com.xnotes.ui.SidePanel(

@@ -104,6 +104,7 @@ internal val tapGestureOptions = listOf(
     "toggle_pan" to R.string.toggle_pan,
     "toggle_eraser" to R.string.toggle_eraser,
     "toggle_previous" to R.string.toggle_previous,
+    "toggle_toolbar" to R.string.toggle_toolbar,
 )
 
 /**

@@ -394,6 +394,10 @@
     <string name="toggle_pan">Attiva/disattiva spostamento</string>
     <string name="toggle_eraser">Attiva/disattiva gomma</string>
     <string name="toggle_previous">Torna allo strumento precedente</string>
+    <string name="toggle_toolbar">Mostra/Nascondi barra degli strumenti</string>
+    <string name="hide_toolbar">Nascondi barra degli strumenti</string>
+    <string name="show_toolbar">Mostra barra degli strumenti</string>
+    <string name="pref_autohide_toolbar_inking">Nascondi automaticamente la barra durante la scrittura</string>
     <string name="pref_filename_template_help">YYYY YY MM DD HH mm ss vengono sostituiti con data e ora di creazione. # genera un numero progressivo per evitare conflitti nella cartella.</string>
     <string name="pref_next_note_named">La prossima nota si chiamerà %1$s</string>
     <string name="pref_side_margin_px">Margine laterale  %1$d px</string>

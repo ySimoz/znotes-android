@@ -529,6 +529,12 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     var renderScale by mutableStateOf(1.0)
         private set
     var sidebarVisible by mutableStateOf(false)
+    var toolbarVisible by mutableStateOf(true)
+    private var toolbarRestoreJob: kotlinx.coroutines.Job? = null
+
+    fun toggleToolbar() {
+        toolbarVisible = !toolbarVisible
+    }
     /** Granted explorer root (a SAF tree URI), or null until the user picks a folder. */
     var browseRoot by mutableStateOf(settings.browseRoot)
         private set
@@ -1569,10 +1575,21 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
                     pdfTextMenu = null
                     markupMenu = null
                     canvasTouched = true
+                    if (preferences.autoHideToolbarWhileInking && (tool.isStroke || tool == Tool.ERASER || tool == Tool.SHAPE)) {
+                        toolbarRestoreJob?.cancel()
+                        if (toolbarVisible) toolbarVisible = false
+                    }
                 }
                 android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
                     canvasTouched = false
                     settlePdfTextMenu()
+                    if (preferences.autoHideToolbarWhileInking && !toolbarVisible) {
+                        toolbarRestoreJob?.cancel()
+                        toolbarRestoreJob = autosaveScope.launch {
+                            kotlinx.coroutines.delay(1200)
+                            toolbarVisible = true
+                        }
+                    }
                 }
             }
             controller.onTouch(ev)
@@ -6086,6 +6103,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         action == "toggle_pan" -> toggleTool(Tool.PAN)
         action == "toggle_eraser" -> toggleTool(Tool.ERASER)
         action == "toggle_previous" -> toggleToPreviousTool()
+        action == "toggle_toolbar" -> toggleToolbar()
         else -> Unit
     }
 

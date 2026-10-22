@@ -428,6 +428,7 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
             "toggle_pan" -> toggleTool(Tool.PAN)
             "toggle_eraser" -> toggleTool(Tool.ERASER)
             "toggle_previous" -> previousTool?.let { armTool(it) }
+            "toggle_toolbar" -> toggleToolbar()
         }
     }
 
@@ -950,6 +951,11 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
     var activeColorIndex by mutableStateOf(0)
     var recentColors by mutableStateOf<List<Rgba>>(emptyList())
     var toolbarColorCount by mutableStateOf(5)
+    var toolbarVisible by mutableStateOf(true)
+
+    fun toggleToolbar() {
+        toolbarVisible = !toolbarVisible
+    }
 
     /** How this bar is arranged, handed over by the host, which owns the settings file. */
     var toolbarLayout by mutableStateOf(com.xnotes.core.tools.ToolbarLayout.CANVAS_DEFAULT)

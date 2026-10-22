@@ -23,6 +23,7 @@ data class Preferences(
     val materialSurfaceSeed: Rgba = DEFAULT_MATERIAL_SURFACE,
     val cornerStyle: CornerStyle = CornerStyle.ROUNDED,
     val toolbarLook: ToolbarLook = ToolbarLook(),
+    val autoHideToolbarWhileInking: Boolean = false,
     val hideWindowDecoration: Boolean = false,
     val pageColor: Rgba? = null, // null ⇒ follow theme paper
     val pageTemplatePdf: String? = null,
@@ -179,6 +180,7 @@ data class Preferences(
             if (toolbarLook.position != ToolbarPosition.TOP) put("toolbar_position", toolbarLook.position.id)
             if (toolbarLook.size != ToolbarSize.REGULAR) put("toolbar_size", toolbarLook.size.id)
             if (toolbarLook.floating) put("toolbar_floating", true)
+            if (autoHideToolbarWhileInking) put("auto_hide_toolbar_inking", true)
             startFullscreen?.let { put("start_fullscreen", it) }
             codeThemePath?.let { put("code_theme_path", it) }
             codeThemeName?.let { put("code_theme_name", it) }
@@ -253,6 +255,7 @@ data class Preferences(
                     size = ToolbarSize.fromId(o.optString("toolbar_size")),
                     floating = o.optBoolean("toolbar_floating", false),
                 ),
+                autoHideToolbarWhileInking = o.optBoolean("auto_hide_toolbar_inking", false),
                 hideWindowDecoration = o.optBoolean("hide_window_decoration", false),
                 pageColor = if (o.isNull("page_color")) null else Rgba.fromHex(o.optString("page_color")),
                 pageTemplatePdf = if (o.isNull("page_template_pdf")) null else o.optString("page_template_pdf").ifEmpty { null },

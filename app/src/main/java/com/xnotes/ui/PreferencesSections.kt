@@ -599,6 +599,9 @@ internal fun ToolbarControlsSection(
         steps = InkPalette.MAX_SWATCHES - 2,
         modifier = Modifier.width(280.dp),
     )
+    CheckRow(stringResource(R.string.pref_autohide_toolbar_inking), prefs.autoHideToolbarWhileInking) {
+        onUpdateHome(prefs.copy(autoHideToolbarWhileInking = it))
+    }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),

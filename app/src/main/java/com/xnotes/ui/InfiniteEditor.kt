@@ -265,7 +265,26 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
     }
 
     init {
-        view.input = { interaction.onTouch(it) }
+        view.input = { ev ->
+            val toolType = ev.getToolType(0)
+            val isInking = (toolType != android.view.MotionEvent.TOOL_TYPE_FINGER || interaction.fingerDraws) &&
+                (tool.isStroke || tool == Tool.ERASER || tool == Tool.SHAPE)
+            if (autoHideToolbarWhileInking && isInking) {
+                when (ev.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        mainHandler.removeCallbacks(restoreToolbarRunnable)
+                        if (toolbarVisible) toolbarVisible = false
+                    }
+                    android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                        if (!toolbarVisible) {
+                            mainHandler.removeCallbacks(restoreToolbarRunnable)
+                            mainHandler.postDelayed(restoreToolbarRunnable, 1200)
+                        }
+                    }
+                }
+            }
+            interaction.onTouch(ev)
+        }
         view.genericMotion = { interaction.onGenericMotion(it) }
         view.hover = { interaction.onHover(it) }
         view.afterLayout = { applyInitialView() }
@@ -952,6 +971,8 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
     var recentColors by mutableStateOf<List<Rgba>>(emptyList())
     var toolbarColorCount by mutableStateOf(5)
     var toolbarVisible by mutableStateOf(true)
+    var autoHideToolbarWhileInking by mutableStateOf(false)
+    private val restoreToolbarRunnable = Runnable { toolbarVisible = true }
 
     fun toggleToolbar() {
         toolbarVisible = !toolbarVisible
@@ -1668,11 +1689,12 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
     }
 
     /** Adopt the app's pen preferences, so the canvas and the paged note behave the same. */
-    fun applyInputPrefs(fingerDraws: Boolean, penButtonTool: Tool?, zoomLockPan: String, detectShapes: Boolean) {
+    fun applyInputPrefs(fingerDraws: Boolean, penButtonTool: Tool?, zoomLockPan: String, detectShapes: Boolean, autoHideToolbarWhileInking: Boolean = false) {
         interaction.fingerDraws = fingerDraws
         interaction.penButtonTool = penButtonTool
         interaction.zoomLockPan = zoomLockPan
         this.detectShapes = detectShapes
+        this.autoHideToolbarWhileInking = autoHideToolbarWhileInking
     }
 
     fun toggleZoomLock() {

@@ -1308,7 +1308,7 @@ private fun EditorPane(
             )
         }
         androidx.compose.animation.AnimatedVisibility(
-            visible = !editor.canvasOpen && !editor.fullscreen && editor.toolbarVisible && editor.tabManager.count > 0,
+            visible = !editor.canvasOpen && !editor.fullscreen && editor.tabManager.count > 0,
             enter = androidx.compose.animation.expandVertically(),
             exit = androidx.compose.animation.shrinkVertically(),
         ) {

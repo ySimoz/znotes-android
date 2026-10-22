@@ -1,16 +1,10 @@
 package com.xnotes.ui
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutLinearInEasing
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -135,11 +129,11 @@ internal fun ToolbarExpandPill(
 
 /**
  * Lays a pane out with its [bar] along the edge Preferences chose and [content] in the rest. A
- * floating bar is handed to [content] to lay over its canvas instead, and [onCover] learns how many
+ * floating or docked bar is handed to [content] to lay over its canvas, and [onCover] informs how many
  * px of each edge (left, top, right, bottom) it covers so the canvas keeps its pages clear of it.
  *
  * Supports smooth, GPU-accelerated fading animation for auto-hide and manual collapse via [visible]
- * and [onToggleVisible].
+ * and [onToggleVisible] without any layout shift or page movement.
  */
 @Composable
 internal fun ColumnScope.ToolbarAround(
@@ -158,83 +152,52 @@ internal fun ColumnScope.ToolbarAround(
         ToolbarPosition.RIGHT -> AbsoluteAlignment.TopRight
     }
 
-    if (!look.floating) {
-        SideEffect { onCover(0.0, 0.0, 0.0, 0.0) }
-        val docked: @Composable BoxScope.() -> Unit = {
-            androidx.compose.animation.AnimatedVisibility(
-                visible = !visible,
-                modifier = Modifier.align(triggerEdge).padding(FLOAT_MARGIN),
-                enter = fadeIn(tween(180, easing = LinearOutSlowInEasing)),
-                exit = fadeOut(tween(150, easing = FastOutLinearInEasing)),
-            ) {
-                ToolbarExpandPill(look.position, onToggleVisible)
-            }
-        }
-        val across = Arrangement.Absolute.Left
-        val barAnimated: @Composable () -> Unit = {
-            androidx.compose.animation.AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn(tween(180, easing = LinearOutSlowInEasing)) +
-                        (if (look.position.vertical) expandHorizontally(tween(200, easing = FastOutSlowInEasing))
-                         else expandVertically(tween(200, easing = FastOutSlowInEasing))),
-                exit = fadeOut(tween(150, easing = FastOutLinearInEasing)) +
-                       (if (look.position.vertical) shrinkHorizontally(tween(180, easing = FastOutSlowInEasing))
-                        else shrinkVertically(tween(180, easing = FastOutSlowInEasing))),
-            ) {
-                CompositionLocalProvider(LocalToolbarCollapse provides onToggleVisible) {
-                    bar()
-                }
-            }
-        }
-        when (look.position) {
-            ToolbarPosition.TOP -> { barAnimated(); Box(rest) { content(docked) } }
-            ToolbarPosition.BOTTOM -> { Box(rest) { content(docked) }; barAnimated() }
-            ToolbarPosition.LEFT -> Row(rest, across) { barAnimated(); Box(Modifier.weight(1f).fillMaxHeight()) { content(docked) } }
-            ToolbarPosition.RIGHT -> Row(rest, across) { Box(Modifier.weight(1f).fillMaxHeight()) { content(docked) }; barAnimated() }
-        }
-        return
-    }
-
-    val depth = barMetrics(look.size).thickness + FLOAT_MARGIN
+    val depth = barMetrics(look.size).thickness + (if (look.floating) FLOAT_MARGIN else 0.dp)
     val px = with(LocalDensity.current) { depth.toPx().toDouble() }
     val position = look.position
+    val barMargin = if (look.floating) FLOAT_MARGIN else 0.dp
+
+    // Insets are based on toolbar geometry, strictly independent of visibility state to prevent page shifting/scrolling.
     SideEffect {
-        val actualPx = if (visible) px else 0.0
         onCover(
-            if (position == ToolbarPosition.LEFT) actualPx else 0.0,
-            if (position == ToolbarPosition.TOP) actualPx else 0.0,
-            if (position == ToolbarPosition.RIGHT) actualPx else 0.0,
-            if (position == ToolbarPosition.BOTTOM) actualPx else 0.0,
+            if (position == ToolbarPosition.LEFT) px else 0.0,
+            if (position == ToolbarPosition.TOP) px else 0.0,
+            if (position == ToolbarPosition.RIGHT) px else 0.0,
+            if (position == ToolbarPosition.BOTTOM) px else 0.0,
         )
     }
+
     val (cover, edge) = when (position) {
-        ToolbarPosition.TOP -> (if (visible) PaddingValues(top = depth) else PaddingValues(0.dp)) to Alignment.TopCenter
-        ToolbarPosition.BOTTOM -> (if (visible) PaddingValues(bottom = depth) else PaddingValues(0.dp)) to Alignment.BottomCenter
-        ToolbarPosition.LEFT -> (if (visible) PaddingValues.Absolute(left = depth) else PaddingValues(0.dp)) to AbsoluteAlignment.CenterLeft
-        ToolbarPosition.RIGHT -> (if (visible) PaddingValues.Absolute(right = depth) else PaddingValues(0.dp)) to AbsoluteAlignment.CenterRight
+        ToolbarPosition.TOP -> PaddingValues(top = depth) to Alignment.TopCenter
+        ToolbarPosition.BOTTOM -> PaddingValues(bottom = depth) to Alignment.BottomCenter
+        ToolbarPosition.LEFT -> PaddingValues.Absolute(left = depth) to AbsoluteAlignment.CenterLeft
+        ToolbarPosition.RIGHT -> PaddingValues.Absolute(right = depth) to AbsoluteAlignment.CenterRight
     }
+
+    val overlayBar: @Composable BoxScope.() -> Unit = {
+        androidx.compose.animation.AnimatedVisibility(
+            visible = visible,
+            modifier = Modifier.align(edge).padding(barMargin),
+            enter = fadeIn(tween(180, easing = LinearOutSlowInEasing)),
+            exit = fadeOut(tween(150, easing = FastOutLinearInEasing)),
+        ) {
+            CompositionLocalProvider(LocalToolbarCollapse provides onToggleVisible) {
+                bar()
+            }
+        }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = !visible,
+            modifier = Modifier.align(triggerEdge).padding(FLOAT_MARGIN),
+            enter = fadeIn(tween(180, easing = LinearOutSlowInEasing)),
+            exit = fadeOut(tween(150, easing = FastOutLinearInEasing)),
+        ) {
+            ToolbarExpandPill(look.position, onToggleVisible)
+        }
+    }
+
     CompositionLocalProvider(LocalToolbarCover provides cover) {
         Box(rest) {
-            content {
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = visible,
-                    modifier = Modifier.align(edge).padding(FLOAT_MARGIN),
-                    enter = fadeIn(tween(180, easing = LinearOutSlowInEasing)),
-                    exit = fadeOut(tween(150, easing = FastOutLinearInEasing)),
-                ) {
-                    CompositionLocalProvider(LocalToolbarCollapse provides onToggleVisible) {
-                        bar()
-                    }
-                }
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = !visible,
-                    modifier = Modifier.align(triggerEdge).padding(FLOAT_MARGIN),
-                    enter = fadeIn(tween(180, easing = LinearOutSlowInEasing)),
-                    exit = fadeOut(tween(150, easing = FastOutLinearInEasing)),
-                ) {
-                    ToolbarExpandPill(look.position, onToggleVisible)
-                }
-            }
+            content(overlayBar)
         }
     }
 }

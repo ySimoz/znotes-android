@@ -775,7 +775,13 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         val canvas = infinite
         canvas.replaceDocument(doc)
         canvas.applyPalette(palette)
-        canvas.applyInputPrefs(settings.prefs.fingerDraws, controller.penButtonTool, settings.prefs.zoomLockPan, settings.prefs.detectShapes)
+        canvas.applyInputPrefs(
+            settings.prefs.fingerDraws,
+            controller.penButtonTool,
+            settings.prefs.zoomLockPan,
+            settings.prefs.detectShapes,
+            settings.prefs.autoHideToolbarWhileInking,
+        )
         canvas.applyZoomRange(settings.prefs.canvasMinZoomPercent, settings.prefs.canvasMaxZoomPercent)
         canvas.onContentChanged = { scheduleCanvasAutosave() }
         // Only a canvas living under the granted folder autosaves; anything else is left alone,
@@ -1575,7 +1581,10 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
                     pdfTextMenu = null
                     markupMenu = null
                     canvasTouched = true
-                    if (preferences.autoHideToolbarWhileInking && (tool.isStroke || tool == Tool.ERASER || tool == Tool.SHAPE)) {
+                    val toolType = ev.getToolType(0)
+                    val isInking = (toolType != android.view.MotionEvent.TOOL_TYPE_FINGER || preferences.fingerDraws) &&
+                        (tool.isStroke || tool == Tool.ERASER || tool == Tool.SHAPE)
+                    if (preferences.autoHideToolbarWhileInking && isInking) {
                         toolbarRestoreJob?.cancel()
                         if (toolbarVisible) toolbarVisible = false
                     }
@@ -2365,6 +2374,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             if (p.penButtonTool == "none") null else (Tool.fromId(p.penButtonTool) ?: Tool.ERASER),
             p.zoomLockPan,
             p.detectShapes,
+            p.autoHideToolbarWhileInking,
         )
         infiniteOrNull?.applyZoomRange(p.canvasMinZoomPercent, p.canvasMaxZoomPercent)
         // Both surfaces' pads: the switch is about the device, not about one of them.

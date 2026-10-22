@@ -1542,12 +1542,13 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     }
 
     /**
-     * A repaint was asked for. The canvas skips it while the front buffer owns the stroke under the
-     * pen: it is not drawing that ink, so the frame would come out the same, and the blit is work
-     * on the thread the pen's samples have to get through.
+     * A repaint was asked for. While the front buffer owns the stroke under the pen the canvas is not
+     * drawing that ink and keeps its last recording, but the window still posts a frame: some devices
+     * only composite the pad when another layer queues a buffer, and show nothing until pen up
+     * otherwise. Invalidating the container re-renders the canvas without calling its onDraw.
      */
     private fun onRender() {
-        if (controller.frontInk?.live != true) view.requestRender()
+        if (controller.frontInk?.live == true) surfaces.postInvalidateOnAnimation() else view.requestRender()
     }
 
     /** Formulas set off the main thread landing: a box moves the layout, a raster only repaints. */
@@ -5056,6 +5057,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
 
     /** Push a settings change into the canvas/caches; each View-menu feature reacts here. */
     private fun onViewSettingsChanged(prev: com.xnotes.canvas.ViewSettings, new: com.xnotes.canvas.ViewSettings) {
+        state.freeMovement = new.freeMovement
         if (prev.mode != new.mode || prev.rotation != new.rotation || prev.verticalScroll != new.verticalScroll) {
             // Re-group / re-orient / re-flow the pages, keep the reader on the same page, and
             // re-fit a fit-width view to the new row width (a Double spread is about twice as
@@ -5077,6 +5079,13 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
                 state.goToPage(cur)
                 refreshView()
             }
+        } else if (prev.freeMovement != new.freeMovement && !new.verticalScroll && state.didInitialFit) {
+            if (new.freeMovement) {
+                state.fitWidthActive = false // free pinches never hold a fit
+                state.fitHeightActive = false
+            }
+            state.goToPage(state.currentPageIndex()) // the page lands where the new rules put it
+            refreshView()
         }
         if (prev.rotation != new.rotation) {
             // Every thumbnail mirrors the canvas orientation: drop them all to re-render.
@@ -8067,9 +8076,14 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         return true
     }
 
+    // Some pens report the side button as a momentary vendor key click, not a held state, so it can't
+    // drive the hold latch; fire the mapped gesture once per click, on the down, or on the up when
+    // no down came. HONOR Magic-Pencil 4s -> 333. Lenovo Tab Pen Plus has one button whose firmware
+    // sends a Lenovo code per gesture (600-604), nearly always as a lone up.
     // Redmi Smart Pen sends its two buttons as the plain page keys, so 92/93 stay claimable by a
     // hardware keyboard: an unmapped button falls through and still pages the note.
-    private val penButtonTapKeycodes = setOf(92, 93)
+    private val penButtonTapKeycodes = setOf(333, 600, 601, 602, 603, 604, 92, 93)
+    private var penTapDownCode = 0
     private fun onPenButtonTapKey(e: android.view.KeyEvent): Boolean {
         val action = when (e.keyCode) {
             android.view.KeyEvent.KEYCODE_PAGE_UP -> preferences.stylusButton1Tap
@@ -8077,7 +8091,14 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             else -> preferences.stylusButtonTap.takeIf { it != "none" } ?: preferences.stylusDoubleTap
         }
         if (action == "none") return false
-        if (e.action == android.view.KeyEvent.ACTION_DOWN) dispatchTapGesture(action)
+        when (e.action) {
+            android.view.KeyEvent.ACTION_DOWN -> {
+                penTapDownCode = e.keyCode
+                dispatchTapGesture(action)
+            }
+            android.view.KeyEvent.ACTION_UP ->
+                if (penTapDownCode == e.keyCode) penTapDownCode = 0 else dispatchTapGesture(action)
+        }
         return true
     }
 

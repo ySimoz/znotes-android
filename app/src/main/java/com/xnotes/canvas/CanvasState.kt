@@ -14,7 +14,6 @@ import com.xnotes.core.model.TextMarkup
 import com.xnotes.core.model.insets
 import com.xnotes.core.model.resolvedPageColor
 import com.xnotes.core.model.resolvedTemplate
-import com.xnotes.core.pal.Pen
 import com.xnotes.core.pal.RasterSurface
 import com.xnotes.core.pal.Renderer
 import com.xnotes.core.pal.SurfaceFactory
@@ -151,7 +150,7 @@ class CanvasState(
     /**
      * True = continuous vertical scrolling (rows stack top-down). False = paginated: rows
      * lay out as a horizontal strip, the scroll window is clamped to [currentRow]'s span,
-     * and the interaction layer flips between rows (edge-swipe; the change is instant).
+     * and the interaction layer flips between rows after a deliberate edge swipe.
      */
     var verticalScroll: Boolean = true
 
@@ -159,12 +158,72 @@ class CanvasState(
     var currentRow: Int = 0
 
     /**
-     * Paginated edge-pull (viewport px, signed; positive pulls toward the next row). Like
-     * [overscrollY] it is purely visual — [origin] shifts by it so the current row slides
-     * against empty background under the finger — and on release the interaction layer
-     * flips instantly or drops the pull.
+     * Paginated horizontal drag (viewport px, positive toward the next row).
+     * [origin] moves the current row with the finger; the renderer draws the
+     * adjacent row using [linkedNeighbourOffset] until release settles the transition.
      */
     var flipOffsetX: Double = 0.0
+    /**
+     * During a linked-page drag, the adjacent row is drawn beside the current row.
+     * This is visual only: hit testing remains limited to [currentRow] until release.
+     */
+    fun linkedNeighbourRow(): Int? {
+        if (verticalScroll || flipOffsetX == 0.0) return null
+        val target = currentRow + if (flipOffsetX > 0.0) 1 else -1
+        return target.takeIf { it in rowRanges().indices }
+    }
+
+    /** Extra distance required for the adjacent row to enter from beyond the viewport. */
+    fun linkedPageTravel(rowIndex: Int): Double {
+        val rows = rowRanges()
+        if (rows.isEmpty() || rowIndex !in rows.indices) return viewportW.toDouble()
+        val neighbour = rowBounds(rows[rowIndex])
+        val offset = linkedNeighbourOffset(rowIndex)
+        // At the end of this drag the neighbour must occupy its regular resting position.
+        // Derive travel from the very same geometry used to draw it to avoid snapping.
+        val travel = offset.x + rowTargetScroll(rowIndex).x - scrollX
+        return kotlin.math.abs(travel)
+    }
+
+    /**
+     * Keep at least 100 dp between the two page edges, while ensuring the entering
+     * page starts outside the viewport. The page-to-page gap is measured on screen,
+     * so zoom and panning cannot cause the pages to overlap.
+     */
+    fun linkedNeighbourOffset(rowIndex: Int): Pt {
+        val rows = rowRanges()
+        val current = rowBounds(rows[currentRow.coerceIn(0, rows.lastIndex)])
+        val neighbour = rowBounds(rows[rowIndex])
+        val gapPx = 100.0 * devicePxPerDp
+        val currentLeft = current.left * zoom - scrollX
+        val currentRight = current.right * zoom - scrollX
+        val targetEdge = if (rowIndex > currentRow) {
+            max(viewportW.toDouble(), currentRight + gapPx)
+        } else {
+            min(0.0, currentLeft - gapPx)
+        }
+        val neighbourEdge = if (rowIndex > currentRow) neighbour.left else neighbour.right
+        return Pt(
+            targetEdge - (neighbourEdge * zoom - scrollX),
+            scrollY - flipLandingScrollY(rowIndex), // drawn where the turn will land it
+        )
+    }
+
+    /** The scroll Y a turn to [row] lands at: where the row rests, or the same reading height between two tall pages. */
+    private fun flipLandingScrollY(row: Int): Double {
+        val rows = rowRanges()
+        val before = rowBounds(rows[currentRow.coerceIn(0, rows.lastIndex)])
+        val after = rowBounds(rows[row])
+        val sy = if (before.h * zoom >= clearH && after.h * zoom >= clearH) {
+            scrollY + (after.top - before.top) * zoom
+        } else {
+            rowTargetScroll(row).y
+        }
+        return rowClampedScroll(row, scrollX, sy).y
+    }
+
+    /** True only while an incoming paginated row or cancelled edge-pull is animating. */
+    var pageFlipAnimating: Boolean = false
 
     /**
      * Whole-file clockwise page rotation (0/90/180/270), applied by the view: pages lay
@@ -314,6 +373,8 @@ class CanvasState(
 
     /** When true, zoom is fixed (pinch pans only, zoom buttons/fit are no-ops). */
     var zoomLocked: Boolean = false
+    /** Paginated only: pages move up and down freely and pinches never snap to a fit (the View menu toggle). */
+    var freeMovement: Boolean = false
 
     /**
      * True while the view is sitting at fit-to-width. Set when a pinch snaps to fit-width (or
@@ -434,7 +495,7 @@ class CanvasState(
 
     // Two layers, like the page cache, so an erase can clear ink in a region without
     // disturbing the (PDF/paper) background underneath: [base] holds window bg + paper +
-    // border + background + labels, [ink] holds just the strokes on a transparent surface.
+    // background + labels, [ink] holds just the strokes on a transparent surface.
     private class SharpFrame(
         val base: RasterSurface,
         val ink: RasterSurface,
@@ -442,6 +503,7 @@ class CanvasState(
         val sy: Double,
         val z: Double,
         val gen: Int,
+        val row: Int,
         /** The last markup edit its base layer holds, like [CacheEntry.seq]. */
         val seq: Int,
     )
@@ -573,7 +635,7 @@ class CanvasState(
         return acc ?: Rect(0.0, 0.0, 1.0, 1.0)
     }
 
-    /** The paginated scroll target for [rowIndex]: keep the zoom, land at the row's top. */
+    /** The paginated scroll target for [rowIndex]: keep the zoom, land centred if the row fits, else at its top. */
     fun rowTargetScroll(rowIndex: Int): Pt {
         val rows = rowRanges()
         if (rows.isEmpty()) return Pt(0.0, 0.0)
@@ -581,7 +643,11 @@ class CanvasState(
         val minX = (rb.left - sideMargin) * zoom - insetLeft
         val maxX = (rb.right + sideMargin) * zoom - viewportW + insetRight
         val sx = if (maxX < minX) (minX + maxX) / 2.0 else minX
-        val sy = (rb.top * zoom - TOP_GAP - insetTop).coerceAtLeast(-insetTop)
+        val sy = if (rb.h * zoom < clearH) {
+            rb.centerY * zoom - clearCenter().y
+        } else {
+            (rb.top * zoom - TOP_GAP - insetTop).coerceAtLeast(-insetTop)
+        }
         return Pt(sx, sy)
     }
 
@@ -623,9 +689,9 @@ class CanvasState(
         val cw = contentW * zoom
         val ch = contentH * zoom
         // Paginated: the row clamp centres the row when it fits, so the scroll always wins; the
-        // whole strip must never be centred (two pages would push each single-page row off centre).
+        // whole strip must never be centred (a spread or a taller page would push a page off centre).
         val ox = (if (!verticalScroll || cw >= clearW) -scrollX else insetLeft + (clearW - cw) / 2.0) - flipOffsetX
-        val oy = (if (ch < clearH) insetTop + (clearH - ch) / 2.0 else -scrollY) - overscrollY
+        val oy = (if (!verticalScroll || ch >= clearH) -scrollY else insetTop + (clearH - ch) / 2.0) - overscrollY
         return Pt(ox, oy)
     }
 
@@ -669,8 +735,15 @@ class CanvasState(
         val minX = (rb.left - sideMargin) * zoom - insetLeft
         val maxX = (rb.right + sideMargin) * zoom - viewportW + insetRight
         val cx = if (maxX < minX) (minX + maxX) / 2.0 else sx.coerceIn(minX, maxX)
-        val maxY = ((rb.bottom + vertMargin) * zoom - viewportH + insetBottom).coerceAtLeast(-insetTop)
-        return Pt(cx, sy.coerceIn(-insetTop, maxY))
+        if (!freeMovement) {
+            // A page that fits sits centred and can't move, and a tall one stops at its margins.
+            val minY = (rb.top - vertMargin) * zoom - insetTop
+            val maxY = (rb.bottom + vertMargin) * zoom - viewportH + insetBottom
+            return Pt(cx, if (maxY < minY) (minY + maxY) / 2.0 else sy.coerceIn(minY, maxY))
+        }
+        // Free movement: a page moves until its top or bottom edge reaches the middle of the clear area.
+        val mid = clearCenter().y
+        return Pt(cx, sy.coerceIn(rb.top * zoom - mid, rb.bottom * zoom - mid))
     }
 
     fun scrollBy(dx: Double, dy: Double) {
@@ -800,6 +873,17 @@ class CanvasState(
         clampScroll()
     }
 
+    /** End a paginated turn on [row], at the height the slide showed it at. */
+    fun landFlip(row: Int) {
+        val rows = rowRanges()
+        if (row !in rows.indices) return
+        val landing = flipLandingScrollY(row)
+        goToPage(rows[row].first)
+        scrollY = landing
+        clampScroll()
+        clearSharpViewport()
+    }
+
     // --- zoom ---
 
     fun setZoomAnchored(focusViewport: Pt, newZoom: Double) {
@@ -912,6 +996,11 @@ class CanvasState(
      * zoom the caller applies; the false→true transition of either flag surfaces the lock hint.
      */
     fun snapZoomToFit(raw: Double): Double {
+        if (!verticalScroll && freeMovement) { // free movement pinches straight past both magnets
+            fitWidthActive = false
+            fitHeightActive = false
+            return raw
+        }
         val fitW = fitWidthZoom()
         val fitH = fitHeightZoom()
         val nearW = fitW > 0.0 && abs(raw - fitW) <= fitW * SNAP_TO_FIT_WIDTH
@@ -1588,7 +1677,10 @@ class CanvasState(
      */
     fun sharpViewportBlit(): SharpBlit? {
         val f = sharpFrame ?: return null
-        if (f.gen != sharpGen) return null
+        // A viewport raster holds complete pixels, including paper/background. Unlike the
+        // per-page caches it cannot be re-used on a different paginated row: otherwise the
+        // previous page is drawn across the new one until its fresh sharp frame finishes.
+        if (f.gen != sharpGen || pageFlipAnimating || (!verticalScroll && (flipOffsetX != 0.0 || f.row != currentRow))) return null
         val scale = zoom / f.z
         val o = origin() // live origin, incl. overscroll lift, so the sharp page rides the pull too
         val o0 = originFor(f.sx, f.sy, f.z)
@@ -1609,9 +1701,11 @@ class CanvasState(
      * [sharpSurfaceForView]) and re-rendered when the user pans/zooms to a new area.
      */
     fun requestSharpViewport() {
-        if (pendingSharp || zoomingInProgress || viewportW <= 0 || viewportH <= 0) return
+        if (pendingSharp || zoomingInProgress || pageFlipAnimating || (!verticalScroll && flipOffsetX != 0.0) ||
+            viewportW <= 0 || viewportH <= 0) return
         if (!isPastResolutionCap()) return
         val gen = sharpGen
+        val row = currentRow
         val sx = scrollX
         val sy = scrollY
         val z = zoom
@@ -1647,8 +1741,10 @@ class CanvasState(
             renderSharpFrame(base, ink, o, z, res, draws, withFlow)
             postToMain {
                 pendingSharp = false
-                if (gen == sharpGen && sx == scrollX && sy == scrollY && z == zoom) {
-                    sharpFrame = SharpFrame(base, ink, sx, sy, z, gen, seq)
+                if (gen == sharpGen && row == currentRow && !pageFlipAnimating &&
+                    sx == scrollX && sy == scrollY && z == zoom
+                ) {
+                    sharpFrame = SharpFrame(base, ink, sx, sy, z, gen, row, seq)
                     // Replay edits committed during the build; the item snapshot predates them.
                     for ((p, rect) in pendingSharpEdits) repairSharpInk(p, rect)
                     onCacheReady?.invoke()
@@ -1662,7 +1758,7 @@ class CanvasState(
         }
     }
 
-    /** Paint the [base] (paper/border/background/labels) and [ink] (flow + strokes) sharp layers. */
+    /** Paint the [base] (paper/background/labels) and [ink] (flow + strokes) sharp layers. */
     private fun renderSharpFrame(
         base: RasterSurface,
         ink: RasterSurface,
@@ -1678,10 +1774,8 @@ class CanvasState(
         val ri = ink.renderer()
         ri.translate(o.x, o.y)
         ri.scale(z, z)
-        val border = Pen(palette.paperBorder, 1.0, cosmetic = true)
         for (d in draws) {
             rb.fillRect(d.pr, paperColor(d.page))
-            if (pageBorders) rb.strokeRect(d.pr, border)
             rb.save()
             rb.clipRect(d.pr)
             rb.translate(d.pr.left, d.pr.top)
@@ -1741,11 +1835,11 @@ class CanvasState(
         r.restore()
     }
 
-    private fun originFor(sx: Double, sy: Double, z: Double): Pt {
+    internal fun originFor(sx: Double, sy: Double, z: Double): Pt {
         val cw = contentW * z
         val ch = contentH * z
         val ox = if (!verticalScroll || cw >= clearW) -sx else insetLeft + (clearW - cw) / 2.0
-        val oy = if (ch < clearH) insetTop + (clearH - ch) / 2.0 else -sy
+        val oy = if (!verticalScroll || ch >= clearH) -sy else insetTop + (clearH - ch) / 2.0
         return Pt(ox, oy)
     }
 

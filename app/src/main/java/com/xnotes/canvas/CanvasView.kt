@@ -17,9 +17,10 @@ import com.xnotes.core.geometry.Rect
 import com.xnotes.core.model.Page
 import com.xnotes.core.model.Stroke
 import com.xnotes.core.pal.BlendMode
-import com.xnotes.core.pal.Pen
 import com.xnotes.platform.AndroidRenderer
 import com.xnotes.platform.MathRendering
+import kotlin.math.ceil
+import kotlin.math.floor
 
 /**
  * The on-screen canvas. Draws the document in immediate mode each frame
@@ -107,6 +108,9 @@ class CanvasView @JvmOverloads constructor(
     private var scrollbarFrac = 0.0
     private var scrollbarLastY = 0f
     private val scrollbarPaint = Paint()
+
+    // The page outline sits on whole device pixels, so it needs no antialiasing.
+    private val borderPaint = Paint()
 
     // Reused paints for the elastic "pull to add page" badge, so onDraw allocates nothing.
     private val overscrollStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND }
@@ -402,18 +406,16 @@ class CanvasView @JvmOverloads constructor(
         r.scale(st.zoom, st.zoom)
 
         val visible = st.visibleContentRect()
-        val border = Pen(st.palette.paperBorder, 1.0, cosmetic = true)
-        // Paginated mode shows only the current row; neighbours never draw.
+        // Paginated mode shows only the current row; neighbours never draw. Iterate the range
+        // directly instead of scanning every page on every animation frame in a large document.
         val drawable = st.drawablePageRange()
 
-        for (i in st.document.pages.indices) {
-            if (i !in drawable) continue
+        for (i in drawable) {
             val pr = st.pageRects.getOrNull(i) ?: continue
             if (!pr.intersects(visible)) continue
             val page = st.document.pages[i]
 
             r.fillRect(pr, st.paperColor(page))
-            if (st.pageBorders) r.strokeRect(pr, border)
             st.backgroundForOrSchedule(page)?.let { blitPageSurface(r, st, page, pr, it.surface) }
             // A live caret session lifts the flow out of the ink cache; paint it
             // immediate-mode here (under the ink, over the background) so every
@@ -431,12 +433,49 @@ class CanvasView @JvmOverloads constructor(
         }
         r.restore()
 
+        // Draw the adjacent spread throughout the gesture and settlement animation,
+        // with clipping to the actual viewport and no stale sharp overlay.
+        val neighbour = st.linkedNeighbourRow()?.let { it to st.linkedNeighbourOffset(it) }
+        neighbour?.let { (neighbourRow, offset) ->
+            // The neighbour is positioned relative to the current page and viewport;
+            // clipping here avoids painting the offscreen part of the strip.
+            canvas.save()
+            canvas.clipRect(0f, 0f, st.viewportW.toFloat(), st.viewportH.toFloat())
+            r.save()
+                r.translate(origin.x + offset.x, origin.y + offset.y)
+                r.scale(st.zoom, st.zoom)
+                val neighbourOriginX = origin.x + offset.x
+                val neighbourOriginY = origin.y + offset.y
+                val neighbourVisible = Rect.fromPoints(
+                    Pt(-neighbourOriginX / st.zoom, -neighbourOriginY / st.zoom),
+                    Pt((st.viewportW - neighbourOriginX) / st.zoom, (st.viewportH - neighbourOriginY) / st.zoom),
+                )
+                for (i in st.rowRanges()[neighbourRow]) {
+                    val pr = st.pageRects.getOrNull(i) ?: continue
+                    if (!pr.intersects(neighbourVisible)) continue
+                    val page = st.document.pages[i]
+                    r.fillRect(pr, st.paperColor(page))
+                    st.backgroundForOrSchedule(page)?.let { blitPageSurface(r, st, page, pr, it.surface) }
+                    r.withSave {
+                        r.clipRect(pr)
+                        r.translate(pr.left, pr.top)
+                        st.applyPageTransform(r, page)
+                        val region = st.displayRectToPage(page, neighbourVisible.translate(-pr.left, -pr.top))
+                        if (st.flowLifted) st.paintFlow?.invoke(page, r, region)
+                        st.paintMath?.invoke(page, r, region)
+                    }
+                    st.cacheForOrSchedule(page)?.let { blitPageSurface(r, st, page, pr, it.surface) }
+                }
+                r.restore()
+                canvas.restore()
+        }
+
         // Past the resolution cap, cover the (soft, capped) page caches with a razor-sharp,
         // full-resolution render of just the viewport. While panning we slide the previous sharp
         // render with the content (so short pans stay sharp) and let the soft cache show only in
         // the strip panning into view; once the view settles we re-render the sharp viewport for
         // the new area. A zoom change drops back to the soft caches until the settle re-render.
-        if (st.isPastResolutionCap()) {
+        if (st.isPastResolutionCap() && !st.pageFlipAnimating && st.flipOffsetX == 0.0) {
             val blit = st.sharpViewportBlit()
             if (blit != null) {
                 val dw = blit.base.width * blit.scale
@@ -453,8 +492,7 @@ class CanvasView @JvmOverloads constructor(
                         r.clipRect(Rect(blit.dx, blit.dy, dw, dh))
                         r.translate(origin.x, origin.y)
                         r.scale(st.zoom, st.zoom)
-                        for (i in st.document.pages.indices) {
-                            if (i !in drawable) continue
+                        for (i in drawable) {
                             val pr = st.pageRects.getOrNull(i) ?: continue
                             if (!pr.intersects(visible)) continue
                             val page = st.document.pages[i]
@@ -478,7 +516,7 @@ class CanvasView @JvmOverloads constructor(
                 mainHandler.removeCallbacks(sharpDebounce)
                 mainHandler.postDelayed(sharpDebounce, SHARP_SETTLE_MS)
             }
-        } else {
+        } else if (!st.pageFlipAnimating && st.flipOffsetX == 0.0) {
             mainHandler.removeCallbacks(sharpDebounce)
             st.clearSharpViewport()
         }
@@ -490,8 +528,7 @@ class CanvasView @JvmOverloads constructor(
         r.withSave {
             r.translate(origin.x, origin.y)
             r.scale(st.zoom, st.zoom)
-            for (i in st.document.pages.indices) {
-                if (i !in drawable) continue
+            for (i in drawable) {
                 val pr = st.pageRects.getOrNull(i) ?: continue
                 if (!pr.intersects(visible)) continue
                 val page = st.document.pages[i]
@@ -511,6 +548,20 @@ class CanvasView @JvmOverloads constructor(
                             r.drawRasterBlended(hc.surface, hc.cover, item.renderColor.a / 255.0, item.blendMode)
                         }
                     }
+                }
+            }
+        }
+
+        // Outlines go on last, over each page's soft edge and the sharp viewport alike.
+        if (st.pageBorders) {
+            borderPaint.color = st.palette.paperBorder.toArgb()
+            for (i in drawable) {
+                val pr = st.pageRects.getOrNull(i) ?: continue
+                if (pr.intersects(visible)) drawPageBorder(canvas, pr, st.zoom, origin)
+            }
+            neighbour?.let { (row, offset) ->
+                for (i in st.rowRanges()[row]) {
+                    st.pageRects.getOrNull(i)?.let { drawPageBorder(canvas, it, st.zoom, origin + offset) }
                 }
             }
         }
@@ -538,6 +589,18 @@ class CanvasView @JvmOverloads constructor(
 
     /** Fires once the view has been still for [SHARP_SETTLE_MS], rendering the sharp viewport. */
     private val sharpDebounce = Runnable { state?.requestSharpViewport() }
+
+    /** Outline [pr] in the device pixel row or column each edge falls in, so zooming never smears or splits it. */
+    private fun drawPageBorder(canvas: Canvas, pr: Rect, zoom: Double, origin: Pt) {
+        val l = ceil(pr.left * zoom + origin.x).toFloat() - 1f
+        val t = ceil(pr.top * zoom + origin.y).toFloat() - 1f
+        val r = floor(pr.right * zoom + origin.x).toFloat()
+        val b = floor(pr.bottom * zoom + origin.y).toFloat()
+        canvas.drawRect(l, t, r + 1f, t + 1f, borderPaint)
+        canvas.drawRect(l, b, r + 1f, b + 1f, borderPaint)
+        canvas.drawRect(l, t + 1f, l + 1f, b, borderPaint)
+        canvas.drawRect(r, t + 1f, r + 1f, b, borderPaint)
+    }
 
     /** Blit a page-space cache surface into the page's display rect, rotated per the view. The
      *  surface covers the page's whole footprint (margins included), so it blits at [CanvasState.footprint]. */
@@ -583,13 +646,14 @@ class CanvasView @JvmOverloads constructor(
         val lastPage = rows.lastOrNull()?.last ?: return
         val rect = st.pageRects.getOrNull(lastPage) ?: return
         val d = resources.displayMetrics.density
-        val progress = (pull / InteractionController.FLIP_TRIGGER).coerceIn(0.0, 1.0).toFloat()
+        val threshold = PaginatedFlipPolicy.addPageThreshold(st.viewportW, st.devicePxPerDp)
+        val progress = (pull / threshold).coerceIn(0.0, 1.0).toFloat()
         val radius = (16f * d) * (0.8f + 0.2f * progress)
 
         val anchor = st.contentToViewport(Pt(rect.right, rect.centerY))
         val cx = anchor.x.toFloat() + 12f * d + radius
         val cy = anchor.y.toFloat().coerceIn(radius + 8f * d, st.viewportH.toFloat() - radius - 24f * d)
-        drawAddPageBadge(canvas, st, cx, cy, radius, progress, pull / (InteractionController.FLIP_TRIGGER * 0.4))
+        drawAddPageBadge(canvas, st, cx, cy, radius, progress, pull / (threshold * 0.4))
     }
 
     /** The shared add-page badge: progress ring, "+", and the pull/release caption under it. */

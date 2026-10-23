@@ -326,7 +326,7 @@ static inline bool is_ns_tag_char(int32_t c) {
 
 static inline bool is_ns_anchor_char(int32_t c) { return is_ns_char(c) && !is_c_flow_indicator(c); }
 
-static char scn_uri_esc(Scanner *scanner, TSLexer *lexer) {
+static int scn_uri_esc(Scanner *scanner, TSLexer *lexer) {
     if (lexer->lookahead != '%') {
         return SCN_STOP;
     }
@@ -343,7 +343,7 @@ static char scn_uri_esc(Scanner *scanner, TSLexer *lexer) {
     return SCN_SUCC;
 }
 
-static char scn_ns_uri_char(Scanner *scanner, TSLexer *lexer) {
+static int scn_ns_uri_char(Scanner *scanner, TSLexer *lexer) {
     if (is_ns_uri_char(lexer->lookahead)) {
         adv(scanner, lexer);
         return SCN_SUCC;
@@ -351,7 +351,7 @@ static char scn_ns_uri_char(Scanner *scanner, TSLexer *lexer) {
     return scn_uri_esc(scanner, lexer);
 }
 
-static char scn_ns_tag_char(Scanner *scanner, TSLexer *lexer) {
+static int scn_ns_tag_char(Scanner *scanner, TSLexer *lexer) {
     if (is_ns_tag_char(lexer->lookahead)) {
         adv(scanner, lexer);
         return SCN_SUCC;

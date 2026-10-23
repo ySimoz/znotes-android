@@ -22,6 +22,7 @@ import com.xnotes.core.model.CanvasItem
 import com.xnotes.core.model.ConnectorDraft
 import com.xnotes.core.model.ConnectorEdit
 import com.xnotes.core.model.ConnectorItem
+import com.xnotes.core.model.EraseRule
 import com.xnotes.core.model.Glue
 import com.xnotes.core.model.GlueFollow
 import com.xnotes.core.model.ImageItem
@@ -29,7 +30,6 @@ import com.xnotes.core.model.Labelled
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.Stroke
-import com.xnotes.core.model.TextItem
 import com.xnotes.core.stroke.Sample
 import com.xnotes.core.stroke.Scribble
 import com.xnotes.core.stroke.ShapeRecognizer
@@ -119,6 +119,10 @@ class InfiniteInteraction(
     private val isEditingText: () -> Boolean = { false },
     /** End that edit, keeping what was typed. */
     private val onCommitText: () -> Unit = {},
+    /** A pan that ended as a tap, at this content point, which an audio pill there may take. */
+    private val onAudioTap: (Pt) -> Boolean = { false },
+    /** The view was panned or pinched by hand, as distinct from moved by the app. */
+    private val onUserMovedView: () -> Unit = {},
 ) {
 
     private val choreographer = Choreographer.getInstance()
@@ -627,9 +631,12 @@ class InfiniteInteraction(
         cancelLongPress()
         val wasMoving = (mode == CanvasPointerMode.PAN && singleFingerPanAllowed() && !panFromPenButton) ||
             (mode == CanvasPointerMode.PINCH && pinchPanAllowed())
+        // A pan that never moved is a tap, and a tap on a pill plays it, as a finger opens links on a note.
+        val panTap = mode == CanvasPointerMode.PAN && !panFromPenButton && panWasTap(e.getX(0).toDouble(), e.getY(0).toDouble())
+        val audioTapped = panTap && onAudioTap(viewport.viewportToContent(Pt(e.getX(0).toDouble(), e.getY(0).toDouble())))
         // A finger tap off the selection puts it away; a tap is the only way to say so with a
         // finger, since a drag there is a pan.
-        if (mode == CanvasPointerMode.PAN && panMayDismiss &&
+        if (!audioTapped && mode == CanvasPointerMode.PAN && panMayDismiss &&
             panWasTap(e.getX(0).toDouble(), e.getY(0).toDouble())
         ) {
             clearSelection()
@@ -819,10 +826,9 @@ class InfiniteInteraction(
         val path = List(stroke.sampleCount) { Pt(stroke.xAt(it), stroke.yAt(it)) }
         val passes = Scribble.passes(path, dpPerUnit) ?: return false
         val radius = stroke.config.baseWidth / 2.0 + Scribble.TOUCH_DP / dpPerUnit
-        // Images, text and anything locked are spared, as the eraser spares them.
-        val candidates = itemsIn(Rect.bounding(path).outset(radius))
-            .filter { !it.locked && it !is ImageItem && it !is TextItem }
-        val taken = Scribble.taken(passes, radius, candidates) { c, x, y, r -> c.intersectsCircle(x, y, r) }
+        // Images, text and anything locked are spared, as the eraser spares them; a scribble is ink, so it takes only lines.
+        val candidates = itemsIn(Rect.bounding(path).outset(radius)).filter { EraseRule.erasable(it) }
+        val taken = Scribble.taken(passes, radius, candidates) { c, x, y, r -> EraseRule.touchesLine(c, x, y, r) }
         if (taken.isEmpty()) return false
         onWetStroke(null)
         onScribbleErase(stroke, taken)
@@ -1741,6 +1747,7 @@ class InfiniteInteraction(
 
     private fun extendPan(vx: Double, vy: Double) {
         trackVelocity(vx, vy)
+        onUserMovedView()
         if (singleFingerPanAllowed()) viewport.panByViewport(vx - lastPan.x, vy - lastPan.y)
         lastPan = Pt(vx, vy)
         onViewChanged()
@@ -1769,6 +1776,7 @@ class InfiniteInteraction(
 
     private fun updatePinch(e: MotionEvent) {
         if (e.pointerCount < 2) return
+        onUserMovedView()
         val a = Pt(e.getX(0).toDouble(), e.getY(0).toDouble())
         val b = Pt(e.getX(1).toDouble(), e.getY(1).toDouble())
         val dist = a.distanceTo(b)

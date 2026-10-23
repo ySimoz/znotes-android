@@ -1,29 +1,18 @@
 package com.xnotes.ui
 
-import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyListItemInfo
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalViewConfiguration
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.zIndex
-import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -31,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -58,20 +48,36 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.xnotes.R
@@ -79,6 +85,8 @@ import com.xnotes.core.model.Page
 import com.xnotes.ui.icons.XnotesIcons
 import com.xnotes.ui.theme.LocalPalette
 import com.xnotes.ui.theme.toComposeColor
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
@@ -196,175 +204,240 @@ private fun PagesTab(
                 value = true
             }
     }
-
-    val dragState = remember(listState, pages.size, editor) {
-        PageRailDragState(listState, pages.size, editor::movePage)
+    val density = LocalDensity.current
+    val haptic = LocalHapticFeedback.current
+    val pagesNow = rememberUpdatedState(pages)
+    // A drag of selected pages: what it carries, the finger in this box's space, and the gap they'd land in.
+    var drag by remember { mutableStateOf<PageDrag?>(null) }
+    var finger by remember { mutableStateOf(Offset.Zero) }
+    var gap by remember { mutableStateOf(0) }
+    var boxSize by remember { mutableStateOf(IntSize.Zero) }
+    val pad = with(density) { LIST_PAD.toPx() }
+    // The gap before the first row whose middle lies below [y]; never above a cover.
+    fun gapAt(y: Float): Int {
+        val rows = listState.layoutInfo.visibleItemsInfo
+        val g = rows.firstOrNull { y - pad < it.offset + it.size / 2f }?.index ?: ((rows.lastOrNull()?.index ?: -1) + 1)
+        return if (pagesNow.value.firstOrNull()?.cover == true) g.coerceAtLeast(1) else g
     }
-    RailDragAutoScroll(dragState)
-
-    Box(
-        Modifier
-            .fillMaxSize()
-            .onGloballyPositioned { dragState.boxCoordinates = it }
-    ) {
-        LazyColumn(
-            Modifier
-                .fillMaxSize()
-                .padding(8.dp)
-                .onGloballyPositioned { dragState.listCoordinates = it },
-            state = listState,
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            itemsIndexed(pages, key = { _, page -> page.uid }) { index, page ->
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.animateItem(),
-                ) {
-                    if (dragState.isDragging && dragState.dropSlot == index) {
-                        DropIndicatorLine()
-                        Spacer(Modifier.height(6.dp))
-                    }
-                    PageThumb(
-                        editor = editor,
-                        index = index,
-                        page = page,
-                        selecting = selecting,
-                        settled = settled,
-                        isDragging = dragState.isDragging && dragState.draggingIndex == index,
-                        canDrag = pages.size > 1,
-                        rowModifier = Modifier,
-                        onSharePages = onSharePages,
-                        onSavePagesAsPdf = onSavePagesAsPdf,
-                        onSavePagesAsImages = onSavePagesAsImages,
-                        onInsertPdf = onInsertPdf,
-                        onPickCover = onPickCover,
-                        onTap = {
-                            if (selecting) editor.togglePageSelection(index) else editor.goToPage(index)
-                        },
-                        onDragStart = { localOffset -> dragState.startDrag(index, localOffset) },
-                        onDrag = dragState::moveDrag,
-                        onDrop = dragState::drop,
-                        onCancel = dragState::cancel,
-                        onLongClick = { editor.togglePageSelection(index) },
-                        onPositioned = { coords -> dragState.thumbCoordinates[index] = coords },
-                    )
-                    if (dragState.isDragging && index == pages.lastIndex && dragState.dropSlot == pages.size) {
-                        Spacer(Modifier.height(6.dp))
-                        DropIndicatorLine()
-                    }
-                }
+    // Held near the top or bottom edge, the list keeps scrolling so a far page can be reached.
+    LaunchedEffect(drag != null) {
+        val band = with(density) { 56.dp.toPx() }
+        val step = with(density) { 22.dp.toPx() }
+        while (drag != null) {
+            val y = finger.y
+            val bottom = boxSize.height.toFloat()
+            val delta = when {
+                y < band -> -((band - y) / band).coerceIn(0f, 1f) * step
+                y > bottom - band -> ((y - (bottom - band)) / band).coerceIn(0f, 1f) * step
+                else -> 0f
             }
-        }
-        VerticalScrollbar(listState, Modifier.align(Alignment.CenterEnd))
-
-        val ghostPage = dragState.draggingIndex?.let { pages.getOrNull(it) }
-        if (dragState.isDragging && ghostPage != null) {
-            PageDragGhost(
-                editor = editor,
-                page = ghostPage,
-                index = dragState.draggingIndex ?: 0,
-                modifier = Modifier.offset {
-                    IntOffset(
-                        dragState.ghostTopLeft.x.roundToInt(),
-                        dragState.ghostTopLeft.y.roundToInt(),
-                    )
-                },
-            )
-        }
-    }
-}
-
-/** State holder for drag-to-reorder gestures in the thumbnail rail. */
-private class PageRailDragState(
-    val listState: LazyListState,
-    val totalPages: Int,
-    val onMovePage: (from: Int, to: Int) -> Unit,
-) {
-    var draggingIndex by mutableStateOf<Int?>(null)
-    var dropSlot by mutableStateOf<Int?>(null)
-    var isDragging by mutableStateOf(false)
-    var ghostTopLeft by mutableStateOf(Offset.Zero)
-    var fingerPositionInList by mutableStateOf(Offset.Zero)
-
-    var boxCoordinates: LayoutCoordinates? = null
-    var listCoordinates: LayoutCoordinates? = null
-    val thumbCoordinates = mutableMapOf<Int, LayoutCoordinates>()
-
-    fun startDrag(index: Int, localOffset: Offset) {
-        draggingIndex = index
-        dropSlot = index
-        isDragging = false
-
-        val box = boxCoordinates
-        val thumb = thumbCoordinates[index]
-        if (box != null && thumb != null && box.isAttached && thumb.isAttached) {
-            ghostTopLeft = box.localPositionOf(thumb, Offset.Zero)
-            val list = listCoordinates
-            fingerPositionInList = if (list != null && list.isAttached) {
-                list.localPositionOf(thumb, localOffset)
-            } else {
-                localOffset
-            }
-        }
-    }
-
-    fun moveDrag(delta: Offset) {
-        ghostTopLeft += delta
-        fingerPositionInList += delta
-        isDragging = true
-        dropSlot = calculateDropSlot(fingerPositionInList.y, listState.layoutInfo.visibleItemsInfo, totalPages)
-    }
-
-    fun drop() {
-        val from = draggingIndex
-        val slot = dropSlot
-        if (from != null && slot != null) {
-            val to = calculateTargetIndex(from, slot, totalPages)
-            if (to != from) {
-                onMovePage(from, to)
-            }
-        }
-        cancel()
-    }
-
-    fun cancel() {
-        draggingIndex = null
-        dropSlot = null
-        isDragging = false
-    }
-}
-
-/** Automatically scrolls the thumbnail LazyColumn when dragging near its top/bottom edges. */
-@Composable
-private fun RailDragAutoScroll(dragState: PageRailDragState) {
-    LaunchedEffect(dragState.isDragging) {
-        while (dragState.isDragging) {
-            val layoutInfo = dragState.listState.layoutInfo
-            val viewportHeight = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
-            if (viewportHeight > 0) {
-                val edgeBand = 100f
-                val y = dragState.fingerPositionInList.y
-                val scrollDelta = when {
-                    y < edgeBand -> -((edgeBand - y) / edgeBand).coerceIn(0f, 1f) * 16f
-                    y > viewportHeight - edgeBand -> ((y - (viewportHeight - edgeBand)) / edgeBand).coerceIn(0f, 1f) * 16f
-                    else -> 0f
-                }
-                if (scrollDelta != 0f) {
-                    dragState.listState.scrollBy(scrollDelta)
-                    dragState.dropSlot = calculateDropSlot(
-                        dragState.fingerPositionInList.y,
-                        dragState.listState.layoutInfo.visibleItemsInfo,
-                        dragState.totalPages,
-                    )
-                }
+            if (delta != 0f) {
+                listState.scrollBy(delta)
+                gap = gapAt(y)
             }
             delay(16L)
         }
     }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .clipToBounds()
+            .onSizeChanged { boxSize = it }
+            // Long-presses live on the panel, not the rows, so a drag keeps running while the list
+            // scrolls its pressed row away: the first selects a page, a second on a selected page
+            // picks the whole selection up. Taps stay with the rows.
+            .pointerInput(editor) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    // Only a held, near-still single finger qualifies; a lift, a scroll or a second finger ends the wait first.
+                    val longPress = try {
+                        withTimeout(viewConfiguration.longPressTimeoutMillis) {
+                            while (true) {
+                                val e = awaitPointerEvent()
+                                val c = e.changes.firstOrNull { it.id == down.id }
+                                if (c == null || !c.pressed || c.isConsumed) return@withTimeout false
+                                if (e.changes.any { it.id != down.id && it.pressed }) return@withTimeout false
+                                if ((c.position - down.position).getDistance() > viewConfiguration.touchSlop) return@withTimeout false
+                            }
+                            @Suppress("UNREACHABLE_CODE") false
+                        }
+                    } catch (_: PointerEventTimeoutCancellationException) {
+                        true
+                    }
+                    if (!longPress) return@awaitEachGesture
+                    val half = THUMB_W.toPx() / 2f
+                    if (abs(down.position.x - size.width / 2f) > half) return@awaitEachGesture
+                    val row = listState.layoutInfo.visibleItemsInfo.firstOrNull { down.position.y - pad in it.offset.toFloat()..(it.offset + it.size).toFloat() }
+                    val page = row?.let { r -> pagesNow.value.getOrNull(r.index)?.takeIf { it.uid == r.key } } ?: return@awaitEachGesture
+                    // Claim the gesture to the up, ahead of the row, so its click can't undo what the press did.
+                    suspend fun AwaitPointerEventScope.holdToUp() {
+                        do {
+                            val e = awaitPointerEvent(PointerEventPass.Initial)
+                            e.changes.forEach { it.consume() }
+                        } while (e.changes.any { it.id == down.id && it.pressed })
+                    }
+                    if (!editor.isPageSelected(page)) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        editor.togglePageSelection(row.index)
+                        holdToUp()
+                        return@awaitEachGesture
+                    }
+                    val carried = editor.selectedPagesInOrder().filter { !it.cover }
+                    if (page.cover || carried.isEmpty()) {
+                        holdToUp()
+                        return@awaitEachGesture
+                    }
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    val from = Offset((size.width - THUMB_W.toPx()) / 2f, pad + row.offset)
+                    finger = down.position
+                    gap = gapAt(down.position.y)
+                    drag = PageDrag(carried, from, editor.cachedPageThumbnail(page), editor.pageAspectRatio(page))
+                    var dropped = false
+                    // Lifted and let go where it lay (the line never left), the pages go back as they were.
+                    val startGap = gap
+                    var travelled = false
+                    try {
+                        while (true) {
+                            val e = awaitPointerEvent(PointerEventPass.Initial)
+                            val c = e.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!c.pressed) {
+                                // A cancelled gesture lifts the finger already consumed; only a real lift drops.
+                                dropped = (travelled || gap != startGap) && !c.isConsumed
+                                c.consume()
+                                break
+                            }
+                            // Read the move before consuming it: a consumed change reports none.
+                            finger += c.positionChange()
+                            c.consume()
+                            if ((finger - down.position).getDistance() > viewConfiguration.touchSlop) travelled = true
+                            gap = gapAt(finger.y)
+                        }
+                    } finally {
+                        val moved = dropped && editor.movePages(carried, gap)
+                        drag = null
+                        if (moved) editor.clearPageSelection()
+                    }
+                }
+            },
+    ) {
+        LazyColumn(
+            Modifier.fillMaxSize().padding(LIST_PAD),
+            state = listState,
+            verticalArrangement = Arrangement.spacedBy(ROW_GAP),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            itemsIndexed(pages, key = { _, page -> page.uid }) { index, page ->
+                val carried = drag?.pages?.any { it === page } == true
+                PageThumb(
+                    editor = editor,
+                    index = index,
+                    page = page,
+                    selecting = selecting,
+                    settled = settled,
+                    carried = carried,
+                    rowModifier = Modifier.animateItem(),
+                    onSharePages = onSharePages,
+                    onSavePagesAsPdf = onSavePagesAsPdf,
+                    onSavePagesAsImages = onSavePagesAsImages,
+                    onInsertPdf = onInsertPdf,
+                    onPickCover = onPickCover,
+                )
+            }
+        }
+        drag?.let { d ->
+            DropLine(listState, gap, pad)
+            DragStack(d, finger, boxSize)
+        }
+        VerticalScrollbar(listState, Modifier.align(Alignment.CenterEnd))
+    }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+/** The list's inset in the panel, and the room between its rows. */
+private val LIST_PAD = 8.dp
+private val ROW_GAP = 10.dp
+
+/** A thumbnail's width in the panel. */
+private val THUMB_W = 150.dp
+
+/** Selected pages being carried; the one pressed lay at [from] in the panel and shows as [bitmap] at its [aspect]. */
+private class PageDrag(val pages: List<Page>, val from: Offset, val bitmap: ImageBitmap?, val aspect: Float)
+
+/** The accent line across the gap the carried pages would land in, while that gap is in view. */
+@Composable
+private fun BoxScope.DropLine(listState: LazyListState, gap: Int, pad: Float) {
+    val density = LocalDensity.current
+    val rows = listState.layoutInfo.visibleItemsInfo
+    val half = with(density) { ROW_GAP.toPx() } / 2f
+    val y = rows.firstOrNull { it.index == gap }?.let { pad + it.offset - half }
+        ?: rows.lastOrNull()?.takeIf { it.index + 1 == gap }?.let { pad + it.offset + it.size + half }
+        ?: return
+    val thick = with(density) { DROP_LINE.toPx() }
+    Box(
+        Modifier
+            .align(Alignment.TopCenter)
+            .offset { IntOffset(0, (y - thick / 2f).roundToInt()) }
+            .size(THUMB_W + 12.dp, DROP_LINE)
+            .clip(CircleShape)
+            .background(LocalPalette.current.accent.toComposeColor()),
+    )
+}
+
+private val DROP_LINE = 3.dp
+
+/**
+ * The carried pages lifted off the list: the pressed page small and beside the finger, so the drop
+ * line under it stays in sight, with up to two more peeking out behind it and their count.
+ */
+@Composable
+private fun DragStack(drag: PageDrag, finger: Offset, room: IntSize) {
+    val palette = LocalPalette.current
+    val density = LocalDensity.current
+    val lift = remember(drag) { Animatable(0f) }
+    LaunchedEffect(drag) { lift.animateTo(1f, tween(LIFT_MS)) }
+    val t = lift.value
+    val scale = 1f + (STACK_SCALE - 1f) * t
+    val cardW = THUMB_W * scale
+    val cardH = cardW * drag.aspect
+    val behind = (drag.pages.size - 1).coerceAtMost(2)
+    val step = 5.dp
+    // Hung below and right of the finger, kept inside the panel.
+    val (x, y) = with(density) {
+        val spread = (step * behind).toPx()
+        val toX = (finger.x + 14.dp.toPx()).coerceIn(0f, (room.width - cardW.toPx() - spread).coerceAtLeast(0f))
+        val toY = (finger.y + 6.dp.toPx()).coerceIn(0f, (room.height - cardH.toPx() - spread).coerceAtLeast(0f))
+        Offset(drag.from.x + (toX - drag.from.x) * t, drag.from.y + (toY - drag.from.y) * t)
+    }
+    Box(Modifier.offset { IntOffset(x.roundToInt(), y.roundToInt()) }.size(cardW + step * behind, cardH + step * behind)) {
+        for (i in behind downTo 1) {
+            Box(
+                Modifier.offset(step * i, step * i).size(cardW, cardH)
+                    .background(palette.paper.toComposeColor())
+                    .border(1.dp, palette.accent.toComposeColor()),
+            )
+        }
+        Box(
+            Modifier.size(cardW, cardH)
+                .shadow(6.dp * t)
+                .background(palette.paper.toComposeColor())
+                .border(2.dp, palette.accent.toComposeColor()),
+        ) {
+            drag.bitmap?.let { Image(it, null, modifier = Modifier.fillMaxSize()) }
+            if (drag.pages.size > 1) {
+                Box(
+                    Modifier.align(Alignment.TopEnd).padding(4.dp).size(22.dp).clip(CircleShape).background(palette.accent.toComposeColor()),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("${drag.pages.size}", color = palette.onAccent.toComposeColor(), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                }
+            }
+        }
+    }
+}
+
+/** How small the carried page shrinks once lifted, and how long the lift takes. */
+private const val STACK_SCALE = 0.6f
+private const val LIFT_MS = 150
+
 @Composable
 private fun PageThumb(
     editor: Editor,
@@ -372,34 +445,19 @@ private fun PageThumb(
     page: Page,
     selecting: Boolean,
     settled: Boolean,
-    isDragging: Boolean,
-    canDrag: Boolean,
+    /** Lifted in a drag: the row dims while the pages are carried. */
+    carried: Boolean,
     rowModifier: Modifier,
     onSharePages: (List<Int>, Boolean) -> Unit,
     onSavePagesAsPdf: (List<Int>) -> Unit,
     onSavePagesAsImages: (List<Int>) -> Unit,
     onInsertPdf: (Int) -> Unit,
     onPickCover: () -> Unit,
-    onTap: () -> Unit,
-    onDragStart: (Offset) -> Unit,
-    onDrag: (Offset) -> Unit,
-    onDrop: () -> Unit,
-    onCancel: () -> Unit,
-    onLongClick: () -> Unit,
-    onPositioned: (LayoutCoordinates) -> Unit,
 ) {
     val palette = LocalPalette.current
     val current = index == editor.pageIndex
     val selected = editor.isPageSelected(index)
     var menuOpen by remember { mutableStateOf(false) }
-
-    val tap by rememberUpdatedState(onTap)
-    val dStart by rememberUpdatedState(onDragStart)
-    val dMove by rememberUpdatedState(onDrag)
-    val dDrop by rememberUpdatedState(onDrop)
-    val dCancel by rememberUpdatedState(onCancel)
-    val lClick by rememberUpdatedState(onLongClick)
-    val touchSlop = LocalViewConfiguration.current.touchSlop
 
     val bitmap by key(editor.thumbnailVersion) {
         produceState<ImageBitmap?>(editor.cachedPageThumbnail(page), page, editor.contentVersion, editor.pdfThumbTick, settled) {
@@ -414,36 +472,16 @@ private fun PageThumb(
     val aspect = editor.pageAspectRatio(page)
     val borderColor = if (selected || current) palette.accent else palette.border
 
-    Column(rowModifier, horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(rowModifier.alpha(if (carried) 0.35f else 1f), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             Modifier
-                .width(150.dp)
-                .height(150.dp * aspect)
-                .alpha(if (isDragging) 0.35f else 1f)
+                .width(THUMB_W)
+                .height(THUMB_W * aspect)
                 .border(if (selected || current) 2.dp else 1.dp, borderColor.toComposeColor())
-                .onGloballyPositioned { onPositioned(it) }
-                .pointerInput(page.uid) {
-                    detectTapGestures(onTap = { tap() })
-                }
-                .pointerInput(page.uid, canDrag) {
-                    if (!canDrag) return@pointerInput
-                    var totalDistance = 0f
-                    var moved = false
-                    detectDragGesturesAfterLongPress(
-                        onDragStart = { localOffset ->
-                            totalDistance = 0f
-                            moved = false
-                            dStart(localOffset)
-                        },
-                        onDrag = { _, delta ->
-                            totalDistance += delta.getDistance()
-                            if (totalDistance > touchSlop) moved = true
-                            dMove(delta)
-                        },
-                        onDragEnd = { if (moved) dDrop() else lClick() },
-                        onDragCancel = { dCancel() },
-                    )
-                },
+                // Tap navigates (or toggles selection in select mode). Long-presses belong to the
+                // panel (see PagesTab), so a drag survives the row scrolling away.
+                .clickable { if (selecting) editor.togglePageSelection(index) else editor.goToPage(index) }
+                .semantics { onLongClick { editor.togglePageSelection(index); true } },
         ) {
             PageThumbBadges(
                 bitmap = bitmap,
@@ -511,54 +549,6 @@ private fun androidx.compose.foundation.layout.BoxScope.PageThumbBadges(
                 }
             }
             PageContextMenu(editor, index, isCover, menuOpen, { onMenuOpenChange(false) }, onSharePages, onSavePagesAsPdf, onSavePagesAsImages, onInsertPdf, onPickCover)
-        }
-    }
-}
-
-/** Visual drop target line shown where a dragged page will land in the rail. */
-@Composable
-private fun DropIndicatorLine(modifier: Modifier = Modifier) {
-    val palette = LocalPalette.current
-    Box(
-        modifier
-            .width(150.dp)
-            .height(3.dp)
-            .clip(RoundedCornerShape(1.5.dp))
-            .background(palette.accent.toComposeColor())
-    )
-}
-
-/** Floating thumbnail tracking the user's finger during a page reorder drag. */
-@Composable
-private fun PageDragGhost(
-    editor: Editor,
-    page: Page,
-    index: Int,
-    modifier: Modifier = Modifier,
-) {
-    val palette = LocalPalette.current
-    val aspect = editor.pageAspectRatio(page)
-    val bitmap = editor.cachedPageThumbnail(page)
-    Box(
-        modifier
-            .zIndex(10f)
-            .width(150.dp)
-            .height(150.dp * aspect)
-            .shadow(10.dp, RoundedCornerShape(6.dp))
-            .clip(RoundedCornerShape(6.dp))
-            .background(palette.panel.toComposeColor())
-            .border(2.dp, palette.accent.toComposeColor(), RoundedCornerShape(6.dp))
-            .alpha(0.9f),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (bitmap != null) {
-            Image(bitmap, contentDescription = null, modifier = Modifier.fillMaxSize())
-        } else {
-            Text(
-                "%02d".format(index + 1),
-                color = palette.accent.toComposeColor(),
-                fontSize = 16.sp,
-            )
         }
     }
 }

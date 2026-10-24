@@ -64,8 +64,8 @@ class LassoSelectionTest {
     fun operationsAffectOnlyInsideSubStrokes() {
         val crossingStroke = sampleStroke(0.0 to 20.0, 40.0 to 20.0)
         val result = LassoSelection.selectExact(listOf(crossingStroke), squarePolygon)
-        val insideSubStroke = result.splits[0].inside[0]
-        val outsideSubStrokes = result.splits[0].outside
+        val insideSubStroke = result.splits[0].inside[0] as Stroke
+        val outsideSubStrokes = result.splits[0].outside.map { it as Stroke }
 
         // Translate the selection by dx = 10, dy = 5
         insideSubStroke.translate(10.0, 5.0)
@@ -192,6 +192,17 @@ class LassoSelectionTest {
         assertSame(line, result.splits[0].original)
         assertEquals(1, result.splits[0].inside.size)
         assertEquals(2, result.splits[0].outside.size)
+
+        val insideLine = result.splits[0].inside[0] as ShapeItem
+        assertEquals(Pt(10.0, 20.0), insideLine.start)
+        assertEquals(Pt(30.0, 20.0), insideLine.end)
+
+        val outside1 = result.splits[0].outside[0] as ShapeItem
+        val outside2 = result.splits[0].outside[1] as ShapeItem
+        assertEquals(Pt(0.0, 20.0), outside1.start)
+        assertEquals(Pt(10.0, 20.0), outside1.end)
+        assertEquals(Pt(30.0, 20.0), outside2.start)
+        assertEquals(Pt(40.0, 20.0), outside2.end)
 
         assertEquals(1, result.selected.size)
         assertSame(result.splits[0].inside[0], result.selected[0])

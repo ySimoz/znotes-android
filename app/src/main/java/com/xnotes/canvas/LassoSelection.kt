@@ -1,5 +1,6 @@
 package com.xnotes.canvas
 
+import com.xnotes.core.geometry.Geometry
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.model.CanvasItem
@@ -15,8 +16,8 @@ import com.xnotes.core.stroke.StrokeClipper
  */
 data class ExactLassoSplit(
     val original: CanvasItem,
-    val inside: List<Stroke>,
-    val outside: List<Stroke>,
+    val inside: List<CanvasItem>,
+    val outside: List<CanvasItem>,
 )
 
 /**
@@ -33,8 +34,8 @@ data class ExactLassoResult(
 data class SelectedSplit(
     val pageIndex: Int,
     val original: CanvasItem,
-    val inside: List<Stroke>,
-    val outside: List<Stroke>,
+    val inside: List<CanvasItem>,
+    val outside: List<CanvasItem>,
 )
 
 /**
@@ -67,6 +68,20 @@ object LassoSelection {
 
         for (item in items) {
             if (item.locked || item !in candidateSet) continue
+
+            if (item is ShapeItem && item.shape == ShapeKind.LINE) {
+                val clip = clipStraightLine(item, polygon)
+                if (clip != null) {
+                    val (insideLines, outsideLines) = clip
+                    if (insideLines.isNotEmpty() && outsideLines.isNotEmpty()) {
+                        selected.addAll(insideLines)
+                        splits.add(ExactLassoSplit(item, insideLines, outsideLines))
+                    } else if (insideLines.isNotEmpty()) {
+                        selected.add(item)
+                    }
+                    continue
+                }
+            }
 
             val strokes = when {
                 item is Stroke -> listOf(item)
@@ -101,6 +116,103 @@ object LassoSelection {
             }
         }
         return ExactLassoResult(selected, splits)
+    }
+
+    /**
+     * Clips a straight [line] against [polygon] with exact sub-pixel boundary intersections,
+     * returning inside and outside [ShapeItem] line fragments.
+     */
+    private fun clipStraightLine(
+        line: ShapeItem,
+        polygon: List<Pt>,
+    ): Pair<List<ShapeItem>, List<ShapeItem>>? {
+        val a = line.start
+        val b = line.end
+        val segLen = a.distanceTo(b)
+        if (segLen < 1e-6) return null
+
+        val ts = ArrayList<Double>()
+        val n = polygon.size
+        val vx = b.x - a.x
+        val vy = b.y - a.y
+
+        for (j in 0 until n) {
+            val c = polygon[j]
+            val d = polygon[(j + 1) % n]
+            val wx = d.x - c.x
+            val wy = d.y - c.y
+            val denom = vx * wy - vy * wx
+            if (kotlin.math.abs(denom) < 1e-11) continue
+
+            val dx = c.x - a.x
+            val dy = c.y - a.y
+            val t = (dx * wy - dy * wx) / denom
+            val u = (dx * vy - dy * vx) / denom
+
+            if (t in 1e-6..(1.0 - 1e-6) && u in -1e-5..(1.0 + 1e-5)) {
+                ts.add(t)
+            }
+        }
+
+        if (ts.isEmpty()) {
+            val mid = Pt((a.x + b.x) * 0.5, (a.y + b.y) * 0.5)
+            val inside = Geometry.pointInPolygon(polygon, mid)
+            return if (inside) {
+                listOf(line) to emptyList()
+            } else {
+                emptyList<ShapeItem>() to listOf(line)
+            }
+        }
+
+        ts.sort()
+        val minGapT = (1e-4 / segLen).coerceAtLeast(1e-6)
+        val filtered = ArrayList<Double>(ts.size)
+        var lastT = -1.0
+        for (t in ts) {
+            if (lastT < 0.0 || (t - lastT) >= minGapT) {
+                filtered.add(t)
+                lastT = t
+            }
+        }
+
+        val allT = ArrayList<Double>(filtered.size + 2)
+        allT.add(0.0)
+        allT.addAll(filtered)
+        allT.add(1.0)
+
+        val inside = ArrayList<ShapeItem>()
+        val outside = ArrayList<ShapeItem>()
+
+        for (k in 0 until allT.size - 1) {
+            val t0 = allT[k]
+            val t1 = allT[k + 1]
+            val p0 = Pt(a.x + t0 * vx, a.y + t0 * vy)
+            val p1 = Pt(a.x + t1 * vx, a.y + t1 * vy)
+            val mid = Pt((p0.x + p1.x) * 0.5, (p0.y + p1.y) * 0.5)
+            val isInside = Geometry.pointInPolygon(polygon, mid)
+
+            val fragment = ShapeItem(
+                shape = ShapeKind.LINE,
+                start = p0,
+                end = p1,
+                strokeRgba = line.strokeRgba,
+                strokeWidth = line.strokeWidth,
+                fillRgba = line.fillRgba,
+                neon = line.neon,
+                neonStrength = line.neonStrength,
+                dashed = line.dashed,
+                dashLength = line.dashLength,
+                dashGap = line.dashGap,
+            )
+
+            if (isInside) {
+                inside.add(fragment)
+            } else {
+                outside.add(fragment)
+            }
+        }
+
+        return inside to outside
     }
 
     /**

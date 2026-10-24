@@ -134,7 +134,7 @@ object StrokeClipper {
         val t = (dx * wy - dy * wx) / denom
         val u = (dx * vy - dy * vx) / denom
 
-        if (t in EPSILON_T..(1.0 - EPSILON_T) && u in -EPSILON_T..(1.0 + EPSILON_T)) {
+        if (t in EPSILON_T..(1.0 - EPSILON_T) && u in -1e-5..(1.0 + 1e-5)) {
             return t
         }
         return null

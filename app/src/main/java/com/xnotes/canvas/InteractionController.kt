@@ -261,6 +261,7 @@ class InteractionController(
     private var strokeStartTimeMs = 0L
     private var drawingPointerId = -1
     private var drawingIsStylus = false
+    private var pointerIsFinger = false
 
     // SHAPE SNAP (hold a freehand stroke still → it becomes a real shape)
     /** Pending "pen held still" timer; non-null only while a stroke is eligible and armed. */
@@ -712,6 +713,8 @@ class InteractionController(
         val content = state.viewportToContent(Pt(vx, vy))
         drawingPointerId = e.getPointerId(0)
         drawingIsStylus = toolType == MotionEvent.TOOL_TYPE_STYLUS
+        val isFinger = toolType == MotionEvent.TOOL_TYPE_FINGER
+        pointerIsFinger = isFinger
 
         // Resolve which tool this pointer drives:
         //  - the stylus eraser end, or the held side button, force the eraser/side-button tool;
@@ -726,15 +729,13 @@ class InteractionController(
             // selection it falls through to draw and dismisses the selection (see beginDraw).
             hasSelection && drawingIsStylus && (tool.isStroke || tool == Tool.SHAPE) &&
                 drawingGrabsSelection(content) -> Tool.SELECT
-            // A finger may grab/resize the ACTIVE selection even when finger-draw is off;
-            // off the selection it still pans.
-            toolType == MotionEvent.TOOL_TYPE_FINGER && !fingerDraws && tool.fingerPansWhenOff &&
-                fingerHitsSelection(content) -> Tool.SELECT
+            // A finger may grab/resize the ACTIVE selection whether finger-draw is on or off;
+            // off the selection it pans (or draws if fingerDraws).
+            hasSelection && isFinger && fingerHitsSelection(content) -> Tool.SELECT
             // A finger otherwise pans instead of drawing/selecting/shaping/erasing (text stays usable by finger).
             toolType == MotionEvent.TOOL_TYPE_FINGER && !fingerDraws && tool.fingerPansWhenOff -> Tool.PAN
             else -> tool
         }
-        val isFinger = toolType == MotionEvent.TOOL_TYPE_FINGER
         val free = FreePointer.isFree(tool, effectiveTool, isFinger)
 
         // A press off the box while editing. With a finger we defer: a tap commits (re-arming the
@@ -975,7 +976,7 @@ class InteractionController(
                     when {
                         textCleared || linkHandled -> Unit
                         state.overscrollY > 0.0 -> releaseOverscroll()
-                        tap && hasSelection && selectionChromeBox()?.contains(content) != true -> clearSelection()
+                        tap && hasSelection && !fingerHitsSelection(content) -> clearSelection()
                         !state.verticalScroll -> endPanPaginated()
                         else -> startPanFling()
                     }
@@ -1636,7 +1637,8 @@ class InteractionController(
         if (state.pageRects.getOrNull(sel.pageIndex) == null) return false
         val c = sel.item as ConnectorItem
         val local = state.toPageSpace(sel.pageIndex, content)
-        return ConnectorEdit.grab(c, local, dotReach()) != null || c.touches(local, OUTLINE_GRAB / state.zoom)
+        val reach = if (pointerIsFinger) HANDLE_HIT / state.zoom else OUTLINE_GRAB / state.zoom
+        return ConnectorEdit.grab(c, local, dotReach()) != null || c.touches(local, reach)
     }
 
     /** The lone selected shape that shows its own frame, or null. */
@@ -1682,10 +1684,10 @@ class InteractionController(
         return ResizeMath.obbRotateGrip(obb, ROTATE_ARM / state.zoom)
     }
 
-    /** True when [content] lands on the active selection — a resize or rotate handle, or inside the
-     *  oriented box. Lets a finger grab the selection even when finger-draw is off (off the
+    /** True when [content] lands on the active selection — a resize or rotate handle, inside the
+     *  oriented box, or on any selected item. Lets a finger grab the selection even when finger-draw is off (off the
      *  selection the finger still pans). */
-    private fun fingerHitsSelection(content: Pt): Boolean {
+    internal fun fingerHitsSelection(content: Pt): Boolean {
         if (selection.isEmpty()) return false
         loneConnector()?.let { return grabsConnector(it, content) }
         val tol = HANDLE_HIT / state.zoom
@@ -1697,7 +1699,43 @@ class InteractionController(
                 if ((sel.item as ShapeItem).dotNear(state.toPageSpace(sel.pageIndex, content), dotReach())) return true
             }
         }
-        return selectionChromeBox()?.contains(content) == true
+        return grabsSelectionBody(content, isFinger = true)
+    }
+
+    /**
+     * Whether a press at [content] grabs the body of the selection (to move it).
+     * Connectors and lines are hit by their outline within reach, framed shapes by their box,
+     * and any selected item by proximity.
+     */
+    internal fun grabsSelectionBody(content: Pt, isFinger: Boolean): Boolean {
+        if (selection.isEmpty()) return false
+        val reach = if (isFinger) HANDLE_HIT / state.zoom else OUTLINE_GRAB / state.zoom
+
+        loneConnector()?.let { sel ->
+            if (state.pageRects.getOrNull(sel.pageIndex) == null) return false
+            val local = state.toPageSpace(sel.pageIndex, content)
+            return (sel.item as ConnectorItem).touches(local, reach)
+        }
+
+        singleEndpointShape()?.let { sel ->
+            if (state.pageRects.getOrNull(sel.pageIndex) == null) return false
+            val local = state.toPageSpace(sel.pageIndex, content)
+            return (sel.item as ShapeItem).touches(local, reach)
+        }
+
+        val box = selectionChromeBox()
+        if (box != null) {
+            val paddedBox = if (isFinger) box.grow(reach) else box
+            if (paddedBox.contains(content)) return true
+        }
+
+        return selection.any { sel ->
+            if (state.pageRects.getOrNull(sel.pageIndex) == null) false
+            else {
+                val local = state.toPageSpace(sel.pageIndex, content)
+                sel.item.intersectsCircle(local.x, local.y, reach) || sel.item.contains(local)
+            }
+        }
     }
 
     /**
@@ -1708,7 +1746,7 @@ class InteractionController(
      */
     private fun drawingGrabsSelection(content: Pt): Boolean {
         loneConnector()?.let { return grabsConnector(it, content) }
-        val lone = pointShape() ?: return fingerHitsSelection(content)
+        val lone = pointShape() ?: return grabsSelectionBody(content, isFinger = false)
         if (state.pageRects.getOrNull(lone.pageIndex) == null) return false
         val tol = HANDLE_HIT / state.zoom
         selectionRotatePoint()?.let { if (it.distanceTo(content) <= tol) return true }
@@ -1754,14 +1792,17 @@ class InteractionController(
         // Inside the settled selection the press moves it, whatever it landed on. Hit-testing
         // first would re-pick the stroke under the finger, and you meant to drag what is
         // selected, not to select what happens to sit inside it.
-        if (selectionChromeBox()?.contains(content) == true) {
+        if (grabsSelectionBody(content, isFinger = pointerIsFinger)) {
             beginMove(content)
             return
         }
         val pageIndex = state.pageIndexAtContent(content)
         if (pageIndex != null) {
             val local = state.toPageSpace(pageIndex, content)
-            val hit = state.document.pages[pageIndex].items.lastOrNull { !it.locked && it.contains(local) }
+            val reach = if (pointerIsFinger) HANDLE_HIT / state.zoom else 0.0
+            val hit = state.document.pages[pageIndex].items.lastOrNull { item ->
+                !item.locked && (item.contains(local) || (reach > 0.0 && item.intersectsCircle(local.x, local.y, reach)))
+            }
             if (hit != null) {
                 if (selection.none { it.item === hit }) setSelection(listOf(Selected(pageIndex, hit)))
                 beginMove(content)
@@ -1801,7 +1842,7 @@ class InteractionController(
         // oriented box) instead of starting a fresh lasso.
         if (tryGrabSelectionHandle(content)) return
         if (trySlideLabel(content)) return
-        if (selectionChromeBox()?.contains(content) == true) {
+        if (grabsSelectionBody(content, isFinger = pointerIsFinger)) {
             beginMove(content)
             return
         }
@@ -4046,6 +4087,12 @@ class InteractionController(
     // --- PINCH ---
 
     private fun beginPinch(e: MotionEvent) {
+        if (mode == PointerMode.MOVE) {
+            moveOffset = Pt.ZERO
+            for ((_, f) in follows) f.restore()
+            looseBefore = null
+            endFollow()
+        }
         liveStroke = null
         strokePageIndex = null
         cancelDwell() // a second finger turns the gesture into a zoom; don't snap a shape mid-pinch

@@ -22,6 +22,7 @@ import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.tools.Tool
 import com.xnotes.core.tools.ToolDefaults
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -584,6 +585,16 @@ class CanvasSelectionTest {
         cmd.undo()
         assertSame(a, c.start.target)
         assertEquals(Pt(100.0, 30.0), c.start.at)
+    }
+
+    @Test fun containsWithScreenMarginIncludesPaddingForLinesAndStrokes() {
+        val l = ShapeItem(ShapeKind.LINE, Pt(50.0, 100.0), Pt(250.0, 100.0), Rgba(0, 0, 0), 2.0)
+        val sel = CanvasSelection(docOf(l))
+        sel.select(listOf(l))
+        // 8px off the line is outside 0 margin, but inside screenMargin = 10.0
+        assertFalse(sel.contains(Pt(150.0, 108.0), screenMargin = 0.0))
+        assertTrue(sel.contains(Pt(150.0, 108.0), screenMargin = 10.0))
+        assertFalse(sel.contains(Pt(150.0, 120.0), screenMargin = 10.0))
     }
 }
 

@@ -124,7 +124,11 @@ class CanvasSelection(private val doc: InfiniteDocument) {
     fun chromeBox(screenMargin: Double = 0.0): Obb? = if (loneConnector != null) null else box?.grow(chromeMargin(screenMargin))
 
     /** True when [p] is inside the selection, so a press there grabs it rather than starting a band. */
-    fun contains(p: Pt, screenMargin: Double = 0.0): Boolean = chromeBox(screenMargin)?.contains(p) == true
+    fun contains(p: Pt, screenMargin: Double = 0.0): Boolean {
+        val b = box ?: return false
+        val margin = chromeMargin(screenMargin).coerceAtLeast(screenMargin)
+        return b.grow(margin).contains(p)
+    }
 
     /** The resize handles, in content space; a shape that keeps its aspect gets corners only. */
     fun handles(screenMargin: Double = 0.0): List<ResizeHandle> {

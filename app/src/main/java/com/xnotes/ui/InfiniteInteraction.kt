@@ -461,8 +461,7 @@ class InfiniteInteraction(
             // and a finger may grab it even with finger-draw off. Both are the paged canvas's
             // rules; without them a selection could only be handled by a stylus.
             onSelection && drawing -> Tool.SELECT
-            toolType == MotionEvent.TOOL_TYPE_FINGER && !fingerDraws && tool.fingerPansWhenOff &&
-                onSelection -> Tool.SELECT
+            onSelection && toolType == MotionEvent.TOOL_TYPE_FINGER -> Tool.SELECT
             toolType == MotionEvent.TOOL_TYPE_FINGER && !fingerDraws && tool.fingerPansWhenOff -> Tool.PAN
             else -> tool
         }
@@ -860,7 +859,9 @@ class InfiniteInteraction(
         // A dot can sit outside the box: a knob out on a callout's tail, a thin line's middle.
         val reach = OverlayTessellator.DOT_TOUCH_PX / viewport.zoom
         if ((sel.items.singleOrNull() as? ShapeItem)?.dotNear(at, reach) == true) return true
-        return sel.contains(at, margin)
+        val singleShape = sel.items.singleOrNull() as? ShapeItem
+        if (singleShape != null && singleShape.shape.isEndpointShape && singleShape.touches(at, tolerance)) return true
+        return sel.contains(at, margin) || sel.items.any { (it as? ShapeItem)?.touches(at, tolerance) == true || it.intersectsCircle(at.x, at.y, tolerance) || it.contains(at) }
     }
 
     /**
@@ -949,7 +950,12 @@ class InfiniteInteraction(
             beginSlide(it)
             return true
         }
-        if (sel.contains(at, margin)) {
+        val singleShape = sel.items.singleOrNull() as? ShapeItem
+        if (singleShape != null && singleShape.shape.isEndpointShape && singleShape.touches(at, tolerance)) {
+            beginMoveAt(sel, at)
+            return true
+        }
+        if (sel.contains(at, margin) || sel.items.any { (it as? ShapeItem)?.touches(at, tolerance) == true || it.intersectsCircle(at.x, at.y, tolerance) || it.contains(at) }) {
             beginMoveAt(sel, at)
             return true
         }

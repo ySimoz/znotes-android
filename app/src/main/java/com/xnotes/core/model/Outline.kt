@@ -94,6 +94,27 @@ internal object Outline {
         return touched to ink
     }
 
+    /**
+     * Converts stroked [paths] to ordinary ink strokes in [pen]'s colour and width,
+     * dashed where the path was and neon when [neon].
+     */
+    fun toStrokes(paths: List<ShapePath>, pen: Pen, neon: Boolean, neonStrength: Double): List<Stroke> {
+        val outlines = paths
+            .filter { it.role.strokes }
+            .flatMap { p ->
+                val dashes = ShapePainter.strokePen(p.role, pen)?.takeIf { it.dashed }
+                p.contours.map { Triple(PathFlattener.flatten(it, ERASE_FLATTEN), it.closed, dashes) }
+            }
+            .filter { it.first.size >= 2 }
+        if (outlines.isEmpty()) return emptyList()
+        val ink = ArrayList<Stroke>()
+        for ((pts, closed, dashes) in outlines) {
+            val fullPts = if (closed) pts + pts.first() else pts
+            ink.add(inkOf(fullPts, pen, dashes, neon, neonStrength))
+        }
+        return ink
+    }
+
     /** A run of a drawn line as a pen stroke: its colour and width, held constant, never smoothed. */
     private fun inkOf(run: List<Pt>, pen: Pen, dashes: Pen?, neon: Boolean, neonStrength: Double): Stroke {
         val tool = if (dashes != null) Tool.DASHED else Tool.PEN

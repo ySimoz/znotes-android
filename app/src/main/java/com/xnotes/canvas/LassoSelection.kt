@@ -3,15 +3,18 @@ package com.xnotes.canvas
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.model.CanvasItem
+import com.xnotes.core.model.ConnectorItem
 import com.xnotes.core.model.Page
+import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.Stroke
+import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.stroke.StrokeClipper
 
 /**
- * Split details for a single stroke divided by a pixel-perfect lasso boundary.
+ * Split details for a single item divided by a pixel-perfect lasso boundary.
  */
 data class ExactLassoSplit(
-    val original: Stroke,
+    val original: CanvasItem,
     val inside: List<Stroke>,
     val outside: List<Stroke>,
 )
@@ -25,11 +28,11 @@ data class ExactLassoResult(
 )
 
 /**
- * Split details for a stroke on a specific page.
+ * Split details for an item on a specific page.
  */
 data class SelectedSplit(
     val pageIndex: Int,
-    val original: Stroke,
+    val original: CanvasItem,
     val inside: List<Stroke>,
     val outside: List<Stroke>,
 )
@@ -50,10 +53,10 @@ object LassoSelection {
     /**
      * Exact lasso selection over a flat list of items.
      *
-     * - Entirely inside strokes are selected whole without splitting.
-     * - Entirely outside strokes are untouched.
-     * - Crossing strokes are split: inside sub-strokes are selected, outside sub-strokes remain unselected.
-     * - Non-stroke items meeting the lasso polygon are selected whole.
+     * - Entirely inside strokes and shapes are selected whole without splitting.
+     * - Entirely outside items are untouched.
+     * - Crossing strokes and stroked shapes are split: inside sub-strokes are selected, outside sub-strokes remain unselected.
+     * - Non-splittable items (e.g. text/glyphs, image, fills) meeting the lasso polygon are selected whole.
      */
     fun selectExact(items: List<CanvasItem>, polygon: List<Pt>): ExactLassoResult {
         if (polygon.size < 3) return ExactLassoResult(emptyList(), emptyList())
@@ -65,16 +68,35 @@ object LassoSelection {
         for (item in items) {
             if (item.locked || item !in candidateSet) continue
 
-            if (item !is Stroke) {
+            val strokes = when {
+                item is Stroke -> listOf(item)
+                item is ShapeItem && !item.isFill && item.shape != ShapeKind.GLYPHS -> item.toStrokes()
+                item is ConnectorItem -> item.toStrokes()
+                else -> null
+            }
+
+            if (strokes.isNullOrEmpty()) {
                 selected.add(item)
                 continue
             }
 
-            val clip = StrokeClipper.clipStroke(item, polygon)
-            if (clip.split) {
-                selected.addAll(clip.inside)
-                splits.add(ExactLassoSplit(item, clip.inside, clip.outside))
-            } else if (clip.inside.isNotEmpty()) {
+            val insideStrokes = ArrayList<Stroke>()
+            val outsideStrokes = ArrayList<Stroke>()
+            var anySplit = false
+
+            for (stroke in strokes) {
+                val clip = StrokeClipper.clipStroke(stroke, polygon)
+                if (clip.split) {
+                    anySplit = true
+                }
+                insideStrokes.addAll(clip.inside)
+                outsideStrokes.addAll(clip.outside)
+            }
+
+            if (anySplit || (insideStrokes.isNotEmpty() && outsideStrokes.isNotEmpty())) {
+                selected.addAll(insideStrokes)
+                splits.add(ExactLassoSplit(item, insideStrokes, outsideStrokes))
+            } else if (insideStrokes.isNotEmpty()) {
                 selected.add(item)
             }
         }

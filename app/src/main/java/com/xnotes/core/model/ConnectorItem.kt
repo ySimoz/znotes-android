@@ -250,6 +250,9 @@ class ConnectorItem(
         return Outline.hits(paths(), c, radius + strokeWidth / 2.0, filled = false)
     }
 
+    /** Convert stroked connector line into ordinary ink strokes. */
+    fun toStrokes(): List<Stroke> = Outline.toStrokes(paths(), pen(), neon, neonStrength)
+
     /**
      * AREA-erase, as for a shape: null when untouched, else the line's runs left outside the circle as
      * pen strokes in its colour and width. A cut connector stops being one; its glue goes with it.

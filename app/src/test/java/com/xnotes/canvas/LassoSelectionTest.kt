@@ -8,7 +8,10 @@ import com.xnotes.core.infinite.CanvasSelection
 import com.xnotes.core.infinite.InfiniteDocument
 import com.xnotes.core.infinite.SplitCanvasItems
 import com.xnotes.core.model.Page
+import com.xnotes.core.model.Rgba
+import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.Stroke
+import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.stroke.Sample
 import com.xnotes.core.tools.Tool
 import com.xnotes.core.tools.ToolConfig
@@ -171,5 +174,113 @@ class LassoSelectionTest {
         history.undo()
         assertEquals(1, doc.itemCount)
         assertSame(crossing, doc.items[0])
+    }
+
+    @Test
+    fun exactLassoSplitsStraightLineIntoSubStrokes() {
+        val line = ShapeItem(
+            shape = ShapeKind.LINE,
+            start = Pt(0.0, 20.0),
+            end = Pt(40.0, 20.0),
+            strokeRgba = Rgba(0, 0, 0, 255),
+            strokeWidth = 2.0,
+        )
+
+        val result = LassoSelection.selectExact(listOf(line), squarePolygon)
+
+        assertEquals(1, result.splits.size)
+        assertSame(line, result.splits[0].original)
+        assertEquals(1, result.splits[0].inside.size)
+        assertEquals(2, result.splits[0].outside.size)
+
+        assertEquals(1, result.selected.size)
+        assertSame(result.splits[0].inside[0], result.selected[0])
+    }
+
+    @Test
+    fun exactLassoEnclosingWholeShapeSelectsShapeItemIntact() {
+        val line = ShapeItem(
+            shape = ShapeKind.LINE,
+            start = Pt(15.0, 15.0),
+            end = Pt(25.0, 25.0),
+            strokeRgba = Rgba(0, 0, 0, 255),
+            strokeWidth = 2.0,
+        )
+
+        val result = LassoSelection.selectExact(listOf(line), squarePolygon)
+
+        assertEquals(0, result.splits.size)
+        assertEquals(1, result.selected.size)
+        assertSame(line, result.selected[0])
+    }
+
+    @Test
+    fun exactLassoSplitsRectangleIntoSubStrokes() {
+        val rect = ShapeItem(
+            shape = ShapeKind.RECTANGLE,
+            start = Pt(0.0, 0.0),
+            end = Pt(20.0, 40.0),
+            strokeRgba = Rgba(0, 0, 0, 255),
+            strokeWidth = 2.0,
+        )
+
+        val result = LassoSelection.selectExact(listOf(rect), squarePolygon)
+
+        assertEquals(1, result.splits.size)
+        assertSame(rect, result.splits[0].original)
+        assertTrue(result.splits[0].inside.isNotEmpty())
+        assertTrue(result.splits[0].outside.isNotEmpty())
+        assertEquals(result.splits[0].inside.size, result.selected.size)
+    }
+
+    @Test
+    fun exactLassoInsideUnfilledShapeEmptyInteriorDoesNotSelect() {
+        val rect = ShapeItem(
+            shape = ShapeKind.RECTANGLE,
+            start = Pt(0.0, 0.0),
+            end = Pt(40.0, 40.0),
+            strokeRgba = Rgba(0, 0, 0, 255),
+            strokeWidth = 2.0,
+        )
+
+        val result = LassoSelection.selectExact(listOf(rect), squarePolygon)
+
+        assertEquals(0, result.splits.size)
+        assertEquals(0, result.selected.size)
+    }
+
+    @Test
+    fun undoRedoRestoresOriginalShapeItemIntactInfiniteCanvas() {
+        val doc = InfiniteDocument()
+        val history = History()
+        val selection = CanvasSelection(doc)
+
+        val line = ShapeItem(
+            shape = ShapeKind.LINE,
+            start = Pt(0.0, 20.0),
+            end = Pt(40.0, 20.0),
+            strokeRgba = Rgba(0, 0, 0, 255),
+            strokeWidth = 2.0,
+        )
+        doc.add(line)
+        assertEquals(1, doc.itemCount)
+
+        val cmd = checkNotNull(selection.selectExact(doc.items, squarePolygon))
+        history.push(cmd)
+
+        // Document replaced ShapeItem with stroke fragments (2 outside + 1 inside)
+        assertEquals(3, doc.itemCount)
+        assertEquals(1, selection.items.size)
+        assertFalse(doc.containsRef(line))
+
+        // Undo restores original shape item intact
+        history.undo()
+        assertEquals(1, doc.itemCount)
+        assertSame(line, doc.items[0])
+
+        // Redo splits shape item into fragments again
+        history.redo()
+        assertEquals(3, doc.itemCount)
+        assertFalse(doc.containsRef(line))
     }
 }

@@ -498,6 +498,9 @@ class ShapeItem(
     /** Does [p] (unturned frame) land within [tol] of a stroked edge, or inside the fill? */
     private fun hits(p: Pt, tol: Double): Boolean = Outline.hits(localPaths(), p, tol, fillRgba != null)
 
+    /** Convert stroked outline into ordinary ink strokes. */
+    fun toStrokes(): List<Stroke> = Outline.toStrokes(paths(), pen(), neon, neonStrength)
+
     /**
      * AREA-erase: what survives an eraser circle (page-local [cx], [cy], [radius]), with the same
      * contract as [Stroke.erasedBy]: `null` when untouched, an empty list to remove the whole

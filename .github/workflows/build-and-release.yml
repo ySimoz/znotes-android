@@ -22,10 +22,16 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Build Android APK
     runs-on: ubuntu-latest
+    env:
+      GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4096m -Dorg.gradle.parallel=true -Dfile.encoding=UTF-8"
 
     steps:
       - name: Checkout repository
@@ -44,17 +50,33 @@ jobs:
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;27.0.12077973" "cmake;3.22.1" || true
 
+      - name: Install and configure ccache
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ccache
+          echo "USE_CCACHE=1" >> $GITHUB_ENV
+          echo "CCACHE_DIR=${{ runner.temp }}/.ccache" >> $GITHUB_ENV
+          echo "CCACHE_MAXSIZE=2G" >> $GITHUB_ENV
+          echo "CCACHE_COMPRESS=1" >> $GITHUB_ENV
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/.ccache
+          key: ccache-${{ runner.os }}-${{ hashFiles('app/src/main/cpp/**') }}
+          restore-keys: |
+            ccache-${{ runner.os }}-
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug
+      - name: Build Debug & Release APKs
+        run: ./gradlew assembleDebug assembleRelease --build-cache
 
-      - name: Build Release APK
-        run: ./gradlew assembleRelease
+      - name: Show ccache stats
+        run: ccache -s || true
 
       - name: Prepare APK outputs
         id: prepare_apks
@@ -64,10 +86,23 @@ jobs:
           echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
           
           # Copy debug APK (pre-signed with Android debug key, ready to install immediately)
-          cp app/build/outputs/apk/debug/app-debug.apk release-apks/znotes-${VERSION_NAME}-debug.apk
+          if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
+            cp app/build/outputs/apk/debug/app-debug.apk release-apks/znotes-${VERSION_NAME}-debug.apk
+          fi
           
-          # Copy release APK
-          cp app/build/outputs/apk/release/app-release.apk release-apks/znotes-${VERSION_NAME}-release-unsigned.apk
+          # Release APK handling (signed or unsigned)
+          APKSIGNER=$(find "${ANDROID_HOME:-$HOME/Android/Sdk}/build-tools" -name apksigner 2>/dev/null | sort -V | tail -n 1)
+          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            cp app/build/outputs/apk/release/app-release.apk release-apks/znotes-${VERSION_NAME}-release.apk
+          elif [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
+            cp app/build/outputs/apk/release/app-release-unsigned.apk release-apks/znotes-${VERSION_NAME}-release-unsigned.apk
+            # Sign with Android debug keystore so this release APK can be directly installed on devices
+            if [ -n "$APKSIGNER" ] && [ -f ~/.android/debug.keystore ]; then
+              $APKSIGNER sign --ks ~/.android/debug.keystore --ks-pass pass:android --key-pass pass:android \
+                --out release-apks/znotes-${VERSION_NAME}-release-signed.apk \
+                app/build/outputs/apk/release/app-release-unsigned.apk
+            fi
+          fi
           
           ls -lh release-apks/
 

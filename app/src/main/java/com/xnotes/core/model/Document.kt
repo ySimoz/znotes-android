@@ -15,6 +15,13 @@ data class OutlineItem(
     var expanded: Boolean = true,
 )
 
+/** What was aimed at a page when it was taken out: its bookmarks, with their list slots, and the page breaks to it. */
+class PageMarks(val bookmarks: List<Pair<Int, Bookmark>>, val breaks: List<com.xnotes.core.text.Paragraph>) {
+    companion object {
+        val NONE = PageMarks(emptyList(), emptyList())
+    }
+}
+
 /**
  * An ordered collection of pages plus on-disk identity (spec 02 §3). New notes
  * open with one blank page at the user's default page size/orientation.
@@ -81,6 +88,38 @@ class Document(
         return page
     }
 
+    /**
+     * Put [page] in at [index] (clamped), moving every bookmark and page break aimed from there on
+     * down a page, and put back [marks], what [removePage] took off it, as it stood. Returns the index.
+     */
+    fun insertPage(page: Page, index: Int, marks: PageMarks = PageMarks.NONE): Int {
+        val at = index.coerceIn(0, pages.size)
+        pages.add(at, page)
+        for (mark in bookmarks) if (mark.page >= at) mark.page++
+        for ((slot, mark) in marks.bookmarks) bookmarks.add(slot.coerceIn(0, bookmarks.size), mark.also { it.page = at })
+        for (para in flow.paragraphs) para.breakToPage?.let { if (it >= at) para.breakToPage = it + 1 }
+        for (para in marks.breaks) para.breakToPage = at
+        onPageInserted(at)
+        return at
+    }
+
+    /**
+     * Take [page] out with the bookmarks on it, moving later ones up a page. A page break aimed at
+     * it is left aimed at the page that takes its place. Returns what it took, for [insertPage].
+     */
+    fun removePage(page: Page): PageMarks {
+        val at = pages.indexOfFirst { it === page }
+        if (at < 0) return PageMarks.NONE
+        pages.removeAt(at)
+        val taken = bookmarks.withIndex().filter { it.value.page == at }.map { it.index to it.value }
+        for ((slot, _) in taken.asReversed()) bookmarks.removeAt(slot)
+        for (mark in bookmarks) if (mark.page > at) mark.page--
+        val breaks = flow.paragraphs.filter { it.breakToPage == at }
+        for (para in flow.paragraphs) para.breakToPage?.let { if (it > at) para.breakToPage = it - 1 }
+        onPageDeleted(at)
+        return PageMarks(taken, breaks)
+    }
+
     /** The size of a blank page added after [previous]: [newPageSize] if set, else [previous]'s, else A4 portrait. */
     fun blankPageSize(previous: Page?): Pair<Double, Double> =
         newPageSize?.pixels(dpi)
@@ -125,25 +164,16 @@ class Document(
         }
     }
 
-    /** Synchronizes bookmarks and outline entries when a page is inserted at [at]. */
+    /** Synchronizes outline entries when a page is inserted at [at]. */
     fun onPageInserted(at: Int) {
-        for (bm in bookmarks) {
-            if (bm.page >= at) bm.page++
-        }
         for (item in outline) {
             if (item.page >= at) item.page++
         }
         dirty = true
     }
 
-    /** Synchronizes bookmarks and outline entries when a page at [at] is deleted, promoting children. */
+    /** Synchronizes outline entries when a page at [at] is deleted, promoting children. */
     fun onPageDeleted(at: Int) {
-        val bIt = bookmarks.iterator()
-        while (bIt.hasNext()) {
-            val bm = bIt.next()
-            if (bm.page == at) bIt.remove()
-            else if (bm.page > at) bm.page--
-        }
         val oIt = outline.iterator()
         while (oIt.hasNext()) {
             val item = oIt.next()

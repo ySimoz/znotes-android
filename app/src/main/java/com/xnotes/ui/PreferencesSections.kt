@@ -721,6 +721,15 @@ internal fun CloudSyncPreferencesSection(
                 onUpdate(prefs.copy(driveSync = updated))
                 com.xnotes.sync.DriveSyncScheduler.schedule(context, updated)
                 com.xnotes.sync.DriveSyncScheduler.triggerImmediate(context)
+                android.widget.Toast.makeText(context, "Connected to $email", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            res.onFailure { error ->
+                android.util.Log.e("GoogleAuthManager", "Sign-in failed in UI", error)
+                val msg = when (error) {
+                    is com.google.android.gms.common.api.ApiException -> "Google Sign-In error (${error.statusCode}): ${error.statusMessage ?: error.message}"
+                    else -> error.message ?: "Sign-in failed"
+                }
+                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
             }
         }
     }

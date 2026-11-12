@@ -84,6 +84,7 @@ object GoogleAuthManager {
             }.apply()
             Result.success(email to name)
         } catch (e: Exception) {
+            android.util.Log.e("GoogleAuthManager", "handleSignInResult failed: statusCode=${(e as? ApiException)?.statusCode}, message=${e.message}", e)
             Result.failure(e)
         }
     }
@@ -204,6 +205,7 @@ object GoogleAuthManager {
 
             Result.success(userInfo)
         } catch (e: Exception) {
+            android.util.Log.e("GoogleAuthManager", "handleSignInResult failed: statusCode=${(e as? ApiException)?.statusCode}, message=${e.message}", e)
             Result.failure(e)
         }
     }

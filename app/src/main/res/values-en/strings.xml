@@ -64,7 +64,9 @@
     <string name="caption_pressure">Pressure</string>
     <string name="caption_sensitivity">Sensitivity</string>
     <string name="caption_multiplier">Multiplier</string>
-    <string name="caption_speed">Speed</string>
+    <string name="caption_thinning">Thinning</string>
+    <string name="caption_smoothing">Smoothing</string>
+    <string name="caption_top_speed">Top speed</string>
     <string name="caption_tip_width">Tip width percentage</string>
     <string name="caption_width">Width</string>
     <string name="caption_scale">Scale</string>
@@ -73,6 +75,9 @@
     <string name="caption_intensity">Intensity</string>
     <string name="caption_straight_line">Straight line</string>
     <string name="caption_inverse">Inverse</string>
+    <string name="caption_stabilization">Stabilization</string>
+    <string name="caption_strength">Strength</string>
+    <string name="caption_crossover">Crossover</string>
     <string name="caption_neon">Neon</string>
     <string name="title_styles">Styles</string>
     <string name="all_pages">All Pages</string>
@@ -1046,4 +1051,6 @@
     <string name="create_save_as_default_help">Use this page style for notes created later.</string>
     <string name="create_custom_page_templates">Imported page templates</string>
     <string name="create_custom_cover_templates">Imported cover templates</string>
+    <string name="change_app_icon">Choose app icon</string>
+    <string name="icon_znotes">zNotes Cyberpunk</string>
 </resources>

@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release tag name (e.g. v0.9.5)'
+        description: 'Release tag name (e.g. v0.9.8)'
         required: false
         default: ''
 
@@ -75,15 +75,17 @@ jobs:
             keytool -genkeypair -v -keystore znote-release.jks -alias znote -keyalg RSA -keysize 2048 -validity 10000 \
               -storepass znotesandroid -keypass znotesandroid -dname "CN=zNotes, OU=zNotes, O=zNotes, L=Unknown, ST=Unknown, C=US"
           fi
+          cp znote-release.jks app/znote-release.jks || true
           cat << 'EOF' > keystore.properties
           storeFile=znote-release.jks
           storePassword=znotesandroid
           keyAlias=znote
           keyPassword=znotesandroid
           EOF
+          cp keystore.properties app/keystore.properties || true
 
-      - name: Build Signed Release APK
-        run: ./gradlew assembleRelease --build-cache
+      - name: Build Debug & Signed Release APKs
+        run: ./gradlew assembleDebug assembleRelease --build-cache
 
       - name: Show ccache stats
         run: ccache -s || true
@@ -96,7 +98,16 @@ jobs:
           echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
           
           # Single official signed release APK
-          cp app/build/outputs/apk/release/app-release.apk release-apks/zNotes-v${VERSION_NAME}.apk
+          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            cp app/build/outputs/apk/release/app-release.apk release-apks/zNotes-v${VERSION_NAME}.apk
+          elif [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
+            cp app/build/outputs/apk/release/app-release-unsigned.apk release-apks/zNotes-v${VERSION_NAME}-unsigned.apk
+          fi
+          
+          # Debug APK for testing
+          if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
+            cp app/build/outputs/apk/debug/app-debug.apk release-apks/zNotes-v${VERSION_NAME}-debug.apk
+          fi
           ls -lh release-apks/
 
       - name: Generate Release Notes
@@ -105,16 +116,21 @@ jobs:
           cat << 'EOF' > release-notes.md
           ## zNotes v${{ env.VERSION_NAME }} Release
 
-          ### Highlights & Added Features
-          - **Exact Lasso on Shapes & Lines**: Select or slice exact sub-segments of geometric shapes and straight lines with sub-pixel precision, preserving circular endpoint handles.
-          - **Finger Drag for Selected Objects**: Move and reposition selected lines, shapes, strokes, and groups directly with fingers, with expanded touch padding.
-          - **Audio Recording & Synced Playback**: Record audio notes directly inside pages, with synchronized ink playback, seeking, and audio pill attachment.
-          - **Google Drive Cloud Sync**: Native Google Sign-In SDK integration with background incremental synchronization for `.xnote` and `.xcanvas`.
-          - **Auto-Hiding / Collapsible Toolbar**: Smooth fade animations without canvas shift or page movement.
-          - **Page Drag & Drop Reordering**: Reorder pages interactively in the page overview side panel as a single undoable step.
-          - **Color Drop Fill**: Drag any color from the toolbar palette into a closed shape to fill it.
-          - **Expanded Code Syntax Highlighting**: Tree-sitter grammar support for 13 additional languages (TypeScript, Go, Rust, HTML, CSS, PHP, Lua, Diff, etc.).
-          - **Hardware Stylus Support**: Latching hover gestures for OnePlus Stylo and Lenovo Tab Pen Plus.
+          ### Highlights & Features in v${{ env.VERSION_NAME }}
+          - **Upstream v0.9.8 & v0.9.7 Merge**:
+            - **Insert Space Tool**: Insert or remove vertical whitespace anywhere on note and PDF pages with clean ink and image slicing. Exported PDFs preserve inserted space.
+            - **Pen Stabilization & 1-Euro Filter**: Real-time jitter smoothing with adjustable strength and crossover sliders.
+            - **Stroke Engine Polish**: Capsule tangent ink rendering prevents Skia carving artifacts; calligraphy downstroke thickness; speed pen smoothing and top speed controls.
+            - **Multiple App Icons**: Choose among 8 built-in app icons directly in the About pane.
+            - **Xiaomi Focus Pen Pro**: Hardware pinch gesture mapped to stylus button click actions.
+          - **zNotes Core Features**:
+            - **Google Drive Cloud Sync**: Incremental background sync for `.xnote` and `.xcanvas` with native Google Sign-In SDK.
+            - **Multi-Note Tabs**: Switch between multiple open documents seamlessly.
+            - **Exact Lasso Tool**: Pixel-perfect geometric selection and splitting on straight lines and shapes.
+            - **Finger Drag**: Directly move selected objects with fingers.
+            - **Collapsible Floating Toolbar**: Smooth fade animations without canvas shift.
+            - **Audio Recording & Playback**: Synced playback attached to notes.
+            - **Hierarchical Table of Contents (TOC)**: Note and PDF outlines in the side panel.
 
           ### Installation
           Download and install **`zNotes-v${{ env.VERSION_NAME }}.apk`** below.

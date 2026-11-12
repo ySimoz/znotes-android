@@ -1,17 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Launcher icon foreground: the broad-nib X on its slab, the slab's top faces lit. -->
+<!-- Launcher icon foreground: zNotes cyberpunk cyan Z with coral glitch offset -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <path
-        android:fillColor="#FF4A34B0"
-        android:pathData="M32.292,41.354L44.292,57.354L32.292,73.354L38.292,73.354L51.383,66.809L56.292,73.354L62.292,73.354L75.708,66.646L63.708,50.646L75.708,34.646L69.708,34.646L56.617,41.191L51.708,34.646L45.708,34.646Z" />
-    <path
-        android:fillColor="#FF8D73FF"
-        android:pathData="M45.708,34.646L32.292,41.354L38.292,41.354L51.708,34.646ZM69.708,34.646L56.617,41.191L56.739,41.354L62.292,41.354L75.708,34.646Z" />
-    <path
-        android:fillColor="#FFFF6B9A"
-        android:pathData="M51.708,34.646L38.292,41.354L50.292,57.354L38.292,73.354L51.708,66.646L54.484,62.944L62.292,73.354L75.708,66.646L63.708,50.646L75.708,34.646L62.292,41.354L59.516,45.056Z" />
+    android:viewportWidth="432"
+    android:viewportHeight="432">
+    <group
+        android:translateX="68.8"
+        android:translateY="68.8"
+        android:scaleX="1.15"
+        android:scaleY="1.15">
+        <!-- Shadow / Glitch offset layer with 75% alpha -->
+        <path
+            android:fillAlpha="0.75"
+            android:fillColor="#FF2A6D"
+            android:fillType="nonZero"
+            android:pathData="M 74.0,60.0 L 206.0,60.0 L 194.0,96.0 L 186.0,96.0 L 122.0,160.0 L 188.0,160.0 L 176.0,196.0 L 48.0,196.0 L 60.0,160.0 L 71.1,160.0 L 135.1,96.0 L 62.0,96.0 Z"
+            android:translateX="-14"
+            android:translateY="-3" />
+        <!-- Foreground cyan primary shape -->
+        <path
+            android:fillColor="#00E5FF"
+            android:fillType="nonZero"
+            android:pathData="M 74.0,60.0 L 206.0,60.0 L 194.0,96.0 L 186.0,96.0 L 122.0,160.0 L 188.0,160.0 L 176.0,196.0 L 48.0,196.0 L 60.0,160.0 L 71.1,160.0 L 135.1,96.0 L 62.0,96.0 Z" />
+    </group>
 </vector>

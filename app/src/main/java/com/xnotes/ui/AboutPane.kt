@@ -100,8 +100,20 @@ fun AboutPane() {
             Modifier.widthIn(max = 420.dp).fillMaxWidth().padding(top = 16.dp, bottom = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            AppIconImage(icon, 72.dp, "zNotes", Modifier.holdForIconPicker(openPicker))
-            Spacer(Modifier.height(16.dp))
+            AppIconImage(
+                icon,
+                72.dp,
+                "zNotes",
+                Modifier.clip(MaterialTheme.shapes.medium).clickable { openPicker() }.holdForIconPicker(openPicker),
+            )
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.material3.TextButton(
+                onClick = openPicker,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+            ) {
+                Text(stringResource(R.string.change_app_icon), color = palette.accent.toComposeColor(), fontSize = 12.sp)
+            }
+            Spacer(Modifier.height(8.dp))
             Text("zNotes", color = palette.text.toComposeColor(), fontWeight = FontWeight.Bold, fontSize = 24.sp)
             Spacer(Modifier.height(5.dp))
             Text(

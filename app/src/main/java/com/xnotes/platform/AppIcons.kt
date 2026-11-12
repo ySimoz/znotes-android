@@ -10,7 +10,7 @@ import java.util.concurrent.Executors
 
 /** A launcher icon xnotes ships, in the order the picker shows them: its activity alias and its adaptive icon. */
 enum class AppIcon(val alias: String, @param:DrawableRes val icon: Int, @param:StringRes val label: Int) {
-    BUBBLEGUM("com.xnotes.MainActivity", R.mipmap.ic_launcher, R.string.icon_bubblegum),
+    ZNOTES("com.xnotes.MainActivity", R.mipmap.ic_launcher, R.string.icon_znotes),
     CREAM_ROSE("com.xnotes.IconCreamRose", R.mipmap.ic_launcher_cream_rose, R.string.icon_cream_rose),
     LIME("com.xnotes.IconLime", R.mipmap.ic_launcher_lime, R.string.icon_lime),
     AQUA("com.xnotes.IconAqua", R.mipmap.ic_launcher_aqua, R.string.icon_aqua),
@@ -26,7 +26,7 @@ object AppIcons {
     private val worker = Executors.newSingleThreadExecutor()
 
     fun current(context: Context): AppIcon =
-        AppIcon.entries.firstOrNull { isOn(context, it) } ?: AppIcon.BUBBLEGUM
+        AppIcon.entries.firstOrNull { isOn(context, it) } ?: AppIcon.ZNOTES
 
     /** Show [icon], off the main thread: its alias goes on before the others go off, so the launcher always has one. */
     fun apply(context: Context, icon: AppIcon) {
@@ -41,7 +41,7 @@ object AppIcons {
     private fun isOn(context: Context, icon: AppIcon): Boolean =
         when (runCatching { context.packageManager.getComponentEnabledSetting(ComponentName(context, icon.alias)) }.getOrNull()) {
             PackageManager.COMPONENT_ENABLED_STATE_ENABLED -> true
-            PackageManager.COMPONENT_ENABLED_STATE_DEFAULT -> icon == AppIcon.BUBBLEGUM // the manifest enables it alone
+            PackageManager.COMPONENT_ENABLED_STATE_DEFAULT -> icon == AppIcon.ZNOTES // the manifest enables it alone
             else -> false
         }
 

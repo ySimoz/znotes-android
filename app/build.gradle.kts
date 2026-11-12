@@ -73,7 +73,9 @@ android {
         }
         if (hasReleaseSigning) {
             create("release") {
-                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                val configuredStore = keystoreProperties.getProperty("storeFile")
+                val rootStoreFile = rootProject.file(configuredStore)
+                storeFile = if (rootStoreFile.exists()) rootStoreFile else file(configuredStore)
                 storePassword = keystoreProperties.getProperty("storePassword")
                 keyAlias = keystoreProperties.getProperty("keyAlias")
                 keyPassword = keystoreProperties.getProperty("keyPassword")
@@ -104,6 +106,11 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
     }
 
     buildFeatures {

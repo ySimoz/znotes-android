@@ -111,6 +111,7 @@
     <string name="view_cover">Copertina</string>
     <string name="caption_vertical_scrolling">Scorrimento verticale</string>
     <string name="caption_pdf_filters">Filtri colore PDF</string>
+    <string name="adjust">Regola</string>
     <string name="filter_contrast">Contrasto</string>
     <string name="filter_invert">Inverti</string>
     <string name="filter_brightness">Luminosità</string>
@@ -788,6 +789,8 @@
     <string name="swatches">Campioni</string>
     <string name="spectrum">Spettro</string>
     <string name="caption_recent">Recenti</string>
+    <string name="eyedropper">Preleva un colore dallo schermo</string>
+    <string name="eyedropper_hint">Tocca un colore per prelevarlo</string>
 
     <!-- Canvas and storage -->
     <string name="pull_to_add_page">Trascina per aggiungere una pagina</string>

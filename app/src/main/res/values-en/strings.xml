@@ -111,6 +111,7 @@
     <string name="view_cover">Cover</string>
     <string name="caption_vertical_scrolling">Vertical scrolling</string>
     <string name="caption_pdf_filters">PDF colour filters</string>
+    <string name="adjust">Adjust</string>
     <string name="filter_contrast">Contrast</string>
     <string name="filter_invert">Invert</string>
     <string name="filter_brightness">Brightness</string>
@@ -752,6 +753,8 @@
     <string name="swatches">Swatches</string>
     <string name="spectrum">Spectrum</string>
     <string name="caption_recent">Recent</string>
+    <string name="eyedropper">Pick a colour from the screen</string>
+    <string name="eyedropper_hint">Touch a colour to pick it</string>
 
     <!-- Canvas and storage -->
     <string name="pull_to_add_page">Pull to add page</string>

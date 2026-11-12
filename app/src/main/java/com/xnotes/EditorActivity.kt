@@ -333,7 +333,7 @@ class EditorActivity : ComponentActivity() {
         if (uri.scheme == "com.xnotes" && uri.host == "oauth2redirect") {
             lifecycleScope.launch {
                 val ed = editor ?: return@launch
-                val result = com.xnotes.sync.GoogleAuthManager.handleRedirect(this@MainActivity, uri, ed.preferences.driveSync.customClientId)
+                val result = com.xnotes.sync.GoogleAuthManager.handleRedirect(this@EditorActivity, uri, ed.preferences.driveSync.customClientId)
                 result.onSuccess { (email, name) ->
                     val updated = ed.preferences.driveSync.copy(
                         enabled = true,
@@ -341,8 +341,8 @@ class EditorActivity : ComponentActivity() {
                         accountName = name,
                     )
                     ed.applyPreferences(ed.preferences.copy(driveSync = updated))
-                    com.xnotes.sync.DriveSyncScheduler.schedule(this@MainActivity, updated)
-                    com.xnotes.sync.DriveSyncScheduler.triggerImmediate(this@MainActivity)
+                    com.xnotes.sync.DriveSyncScheduler.schedule(this@EditorActivity, updated)
+                    com.xnotes.sync.DriveSyncScheduler.triggerImmediate(this@EditorActivity)
                 }
             }
         }

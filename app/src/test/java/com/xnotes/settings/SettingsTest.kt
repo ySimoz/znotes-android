@@ -683,14 +683,16 @@ class SettingsTest {
 
     @Test fun mainActivityProvidesActivityResultRegistryOwner() {
         // Overriding LocalContext with createConfigurationContext strips ActivityResultRegistryOwner.
-        // MainActivity must explicitly provide LocalActivityResultRegistryOwner so EditorScreen's
+        // EditorActivity must explicitly provide LocalActivityResultRegistryOwner so EditorScreen's
         // rememberLauncherForActivityResult does not throw at runtime.
         val candidates = listOf(
+            java.io.File("src/main/java/com/xnotes/EditorActivity.kt"),
+            java.io.File("app/src/main/java/com/xnotes/EditorActivity.kt"),
             java.io.File("src/main/java/com/xnotes/MainActivity.kt"),
             java.io.File("app/src/main/java/com/xnotes/MainActivity.kt"),
         )
         val file = candidates.firstOrNull { it.exists() }
-        assertTrue("MainActivity.kt must exist", file != null && file.exists())
+        assertTrue("EditorActivity.kt or MainActivity.kt must exist", file != null && file.exists())
         val content = file!!.readText()
         assertTrue(
             "CompositionLocalProvider must provide LocalActivityResultRegistryOwner alongside LocalContext",

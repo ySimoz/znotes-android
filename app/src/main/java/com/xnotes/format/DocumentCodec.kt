@@ -10,7 +10,9 @@ import com.xnotes.core.model.OutlineItem
 import com.xnotes.core.model.CanvasItem
 import com.xnotes.core.model.ConnectorEnd
 import com.xnotes.core.model.ConnectorItem
+import com.xnotes.core.model.CutEdge
 import com.xnotes.core.model.Document
+import com.xnotes.core.model.ImageCrop
 import com.xnotes.core.model.ImageData
 import com.xnotes.core.model.ImageItem
 import com.xnotes.core.model.Orientation
@@ -23,6 +25,7 @@ import com.xnotes.core.model.PageMargins
 import com.xnotes.core.model.PageStyle
 import com.xnotes.core.model.PageTurn
 import com.xnotes.core.model.Rgba
+import com.xnotes.core.model.Room
 import com.xnotes.core.model.Routing
 import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.ShapeLabel
@@ -40,6 +43,7 @@ import com.xnotes.core.pal.ImageCodec
 import com.xnotes.core.pal.TextMeasurer
 import com.xnotes.core.pdf.PdfPageGeometry
 import com.xnotes.core.stroke.Sample
+import com.xnotes.core.stroke.StrokeEngine
 import com.xnotes.core.stroke.StrokeSimplify
 import com.xnotes.core.shapes.Axis
 import com.xnotes.core.shapes.Elbow
@@ -380,12 +384,35 @@ class DocumentCodec(
         j.endArray()
         writeStyle(j, page.style)
         writeMargins(j, page.margins)
+        writeRooms(j, page.rooms)
         j.endObject()
     }
 
+    /** The room Insert space opened on a page, written only when there is some. */
+    private fun writeRooms(j: JsonWrite, rooms: List<Room>) {
+        if (rooms.isEmpty()) return
+        j.name("rooms").beginArray()
+        for (r in rooms) {
+            j.beginObject()
+            j.name("at").value(r.at)
+            j.name("size").value(r.size)
+            if (r.sideways) j.name("sideways").value(true)
+            j.endObject()
+        }
+        j.endArray()
+    }
+
+    /** The edges room cut an item along, each its point and outward normal, written only when it was cut. */
+    private fun writeCuts(j: JsonWrite, cuts: List<CutEdge>) {
+        if (cuts.isEmpty()) return
+        j.name("cuts").beginArray()
+        for (c in cuts) j.beginArray().value(c.x).value(c.y).value(c.nx).value(c.ny).endArray()
+        j.endArray()
+    }
+
     private fun writeStroke(j: JsonWrite, s: Stroke) {
-        // Per-sample time is only meaningful to the speed pen, so it's written as an
-        // optional 4th element only then — every other stroke serializes unchanged.
+        // Per-sample time and kept width are only meaningful to the speed pen, so they're written as
+        // optional 4th and 5th elements only then; every other stroke serializes unchanged.
         val withTime = s.config.speedStrength > 0.0
         j.beginObject()
         j.name("kind").value(Stroke.KIND)
@@ -400,6 +427,8 @@ class DocumentCodec(
         // New style fields are written only when set, so a plain pen/calligraphy
         // stroke's config is byte-for-byte what older versions wrote.
         if (s.config.speedStrength != 0.0) j.name("speed_strength").value(s.config.speedStrength)
+        if (s.config.speedSmoothing != StrokeEngine.DEFAULT_SPEED_SMOOTHING) j.name("speed_smoothing").value(s.config.speedSmoothing)
+        if (s.config.speedTop != StrokeEngine.SPEED_HI) j.name("speed_top").value(s.config.speedTop)
         if (s.config.taperEnabled) {
             j.name("taper_enabled").value(true)
             j.name("taper_min_factor").value(s.config.taperMinFactor)
@@ -423,7 +452,7 @@ class DocumentCodec(
         // content px (2dp) and 0.001 pressure (3dp) are far below anything visible, and a
         // 500 Hz note shrinks ~2.3x. Rounding is idempotent, so re-saves stay byte-stable.
         j.name("samples").beginArray()
-        for (sm in s.samples) j.samplePoint(sm.x, sm.y, sm.pressure, if (withTime) sm.t else null)
+        for (sm in s.samples) j.samplePoint(sm.x, sm.y, sm.pressure, if (withTime) sm.t else null, sm.widthFactor.takeIf { withTime && it > 0.0 })
         j.endArray()
         // The speed pen's gesture-speed scale (zoom ÷ density at pen-down) reconstructs its
         // width on reload; written alongside the per-sample times, only for that tool.
@@ -434,6 +463,7 @@ class DocumentCodec(
         if (s.smoothScale != 1.0) j.name("smooth_scale").value(s.smoothScale)
         // Straight-line strokes must reload un-smoothed, else the EMA pulls their far end inward.
         if (s.straight) j.name("straight").value(true)
+        writeCuts(j, s.cuts)
         s.sync?.let { writeSync(j, it) }
         if (s.locked) j.name("locked").value(true)
         s.group?.let { j.name("group").value(it) }
@@ -453,6 +483,7 @@ class DocumentCodec(
         if (item.orientation != 0) j.name("orientation").value(item.orientation)
         if (item.angle != 0.0) j.name("angle").value(item.angle)
         if (item.flip != Flip.NONE) j.name("flip").value(item.flip.id)
+        item.part?.let { j.name("part").beginArray().value(it.x).value(it.y).value(it.w).value(it.h).endArray() }
         item.sync?.let { writeSync(j, it) }
         if (item.locked) j.name("locked").value(true)
         item.group?.let { j.name("group").value(it) }
@@ -930,6 +961,7 @@ class DocumentCodec(
         val id: Int?,
         val sync: SyncMark?,
         val group: Int? = null,
+        val part: Rect? = null,
     ) : Pending(index, asset)
 
     private class PendingAudio(
@@ -1087,6 +1119,7 @@ class DocumentCodec(
             var cover = false
             var style = PageStyle()
             var margins = PageMargins()
+            var rooms = emptyList<Room>()
             val items = mutableListOf<CanvasItem>()
             val pending = ArrayList<Pending>()
             val glue = GlueRead()
@@ -1100,6 +1133,7 @@ class DocumentCodec(
                     "cover" -> cover = boolOr(p, false)
                     "style" -> style = parseStyle(p)
                     "margins" -> margins = parseMargins(p)
+                    "rooms" -> rooms = parseRooms(p)
                     "items" -> parseItems(p, items, pending, glue)
                     else -> p.skipValue()
                 }
@@ -1115,6 +1149,7 @@ class DocumentCodec(
             val page = Page(
                 width = width, height = height, items = items, pdfPage = pdfPage, style = style, margins = margins,
                 pdfTurn = if (pdfPage == null) 0 else PageTurn.normalize(pdfTurn),
+                rooms = roomsWithin(rooms, width, height),
             )
             // Only the first page can be the cover; a flag anywhere else is dropped.
             page.cover = cover && m.pages.isEmpty()
@@ -1188,6 +1223,8 @@ class DocumentCodec(
         var mode: String? = null
         var pattern: String? = null
         var tapeWidth: Double? = null
+        var cuts: List<CutEdge> = emptyList()
+        var part: Rect? = null
     }
 
     /** Stroke config fields as written; null = absent, so defaults resolve exactly as before. */
@@ -1198,6 +1235,8 @@ class DocumentCodec(
         var directionStrength: Double? = null
         var rgba: Rgba? = null
         var speedStrength: Double? = null
+        var speedSmoothing: Double? = null
+        var speedTop: Double? = null
         var taperEnabled: Boolean? = null
         var taperLength: Double? = null
         var taperMinFactor: Double? = null
@@ -1268,6 +1307,8 @@ class DocumentCodec(
                 "rec_ms" -> s.recMs = intOr(p, 0)
                 "mode" -> s.mode = stringOrNull(p)
                 "pattern" -> s.pattern = stringOrNull(p)
+                "cuts" -> s.cuts = parseCuts(p)
+                "part" -> s.part = rectOrNull(p)?.let { partWithin(it) }
                 else -> p.skipValue()
             }
         }
@@ -1282,7 +1323,7 @@ class DocumentCodec(
                     pending.add(
                         PendingImage(
                             items.size + pending.size, asset, s.rect, s.srcW, s.srcH,
-                            s.orientation, s.angle, Flip.fromId(s.flip), s.locked, s.id, sync, s.group,
+                            s.orientation, s.angle, Flip.fromId(s.flip), s.locked, s.id, sync, s.group, s.part,
                         ),
                     )
                 }
@@ -1326,7 +1367,7 @@ class DocumentCodec(
         val width = s.tapeWidth?.takeIf { it.isFinite() && it > 0.0 } ?: TapeItem.DEFAULT_WIDTH
         return TapeItem(
             TapeShape(mode, if (mode == TapeMode.FREEHAND) points else points.take(2), width),
-            s.rgba ?: InkPalette.DEFAULT,
+            s.rgba ?: InkPalette.LEGACY,
             TapePattern.fromId(s.pattern),
         )
     }
@@ -1340,8 +1381,10 @@ class DocumentCodec(
             pressureEnabled = c?.pressureEnabled ?: def.pressureEnabled,
             pressureMinFactor = c?.pressureMinFactor ?: def.pressureMinFactor,
             directionStrength = c?.directionStrength ?: def.directionStrength,
-            rgba = c?.rgba ?: def.rgba,
+            rgba = c?.rgba ?: InkPalette.LEGACY,
             speedStrength = c?.speedStrength ?: def.speedStrength,
+            speedSmoothing = c?.speedSmoothing ?: def.speedSmoothing,
+            speedTop = c?.speedTop ?: def.speedTop,
             taperEnabled = c?.let { it.taperEnabled ?: ((it.taperLength ?: 0.0) > 0.0) } ?: def.taperEnabled,
             // Absent on legacy taper strokes -> the legacy tip, so old tapers reload tapered.
             taperMinFactor = c?.taperMinFactor ?: ToolDefaults.LEGACY_TAPER_TIP,
@@ -1354,7 +1397,10 @@ class DocumentCodec(
             highlighterInverse = c?.highlighterInverse ?: def.highlighterInverse,
         )
         val stroke = Stroke(tool, config, emptyList(), s.speedScale, s.straight, s.smoothScale)
-        s.samples?.let { stroke.setSamples(it.xs, it.ys, it.ps, it.ts, it.n) }
+        s.samples?.let { stroke.setSamples(it.xs, it.ys, it.ps, it.ts, it.n, it.ws) }
+        // Speed ink saved before its widths were kept works them out once, as it is drawn now.
+        stroke.freezeSpeedWidths()
+        stroke.cuts = s.cuts
         return stroke
     }
 
@@ -1541,6 +1587,8 @@ class DocumentCodec(
                 "direction_strength" -> c.directionStrength = doubleOrNull(p)
                 "rgba" -> c.rgba = rgbaOrNull(p)
                 "speed_strength" -> c.speedStrength = doubleOrNull(p)
+                "speed_smoothing" -> c.speedSmoothing = doubleOrNull(p)
+                "speed_top" -> c.speedTop = doubleOrNull(p)
                 "taper_enabled" -> c.taperEnabled = boolOrNull(p)
                 "taper_length" -> c.taperLength = doubleOrNull(p)
                 "taper_min_factor" -> c.taperMinFactor = doubleOrNull(p)
@@ -1563,7 +1611,7 @@ class DocumentCodec(
             return null
         }
         val out = RawSamples()
-        val tuple = DoubleArray(4)
+        val tuple = DoubleArray(5)
         p.beginArray()
         while (p.hasNext()) {
             if (p.peek() != JsonPull.Token.BEGIN_ARRAY) {
@@ -1571,14 +1619,15 @@ class DocumentCodec(
                 continue
             }
             // NaN back from [JsonPull.nextSample] means the slot held nothing readable, which is
-            // not the same as a zero: pressure then defaults to full, and the 4th element
-            // (relative ms, only speed-pen strokes carry it) to none.
+            // not the same as a zero: pressure then defaults to full, and the 4th and 5th elements
+            // (relative ms and kept width, only speed-pen strokes carry them) to none.
             p.nextSample(tuple)
             out.add(
                 if (tuple[0].isNaN()) 0.0 else tuple[0],
                 if (tuple[1].isNaN()) 0.0 else tuple[1],
                 if (tuple[2].isNaN()) 1.0 else tuple[2],
                 if (tuple[3].isNaN()) 0.0 else tuple[3],
+                if (tuple[4].isNaN()) 0.0 else tuple[4],
             )
         }
         p.endArray()
@@ -1700,7 +1749,7 @@ class DocumentCodec(
             h = probed.height
         }
         val rect = spec.rect ?: Rect(0.0, 0.0, w.toDouble(), h.toDouble())
-        return ImageItem(ImageData(file, w, h), rect, spec.orientation, spec.angle, spec.flip)
+        return ImageItem(ImageData(file, w, h), rect, spec.orientation, spec.angle, spec.flip, spec.part)
             .also {
                 it.locked = spec.locked
                 it.sync = spec.sync
@@ -1799,6 +1848,85 @@ class DocumentCodec(
         }
         p.endArray()
         return if (count >= 2) Pt(x, y) else null
+    }
+
+    /** A page's room as written, the broken rooms left out and the rest within the page and apart. */
+    private fun parseRooms(p: JsonPull): List<Room> {
+        if (p.peek() != JsonPull.Token.BEGIN_ARRAY) {
+            p.skipValue()
+            return emptyList()
+        }
+        val out = ArrayList<Room>()
+        p.beginArray()
+        while (p.hasNext()) {
+            if (p.peek() != JsonPull.Token.BEGIN_OBJECT) {
+                p.skipValue()
+                continue
+            }
+            var at: Double? = null
+            var size: Double? = null
+            var sideways = false
+            p.beginObject()
+            while (p.hasNext()) {
+                when (p.nextName()) {
+                    "at" -> at = doubleOrNull(p)
+                    "size" -> size = doubleOrNull(p)
+                    "sideways" -> sideways = boolOr(p, false)
+                    else -> p.skipValue()
+                }
+            }
+            p.endObject()
+            if (at != null && size != null && at.isFinite() && size.isFinite() && size > 0.0) out += Room(at, size, sideways)
+        }
+        p.endArray()
+        return out
+    }
+
+    /** [rooms] a [width] by [height] page can hold: in order, apart, and leaving the page some size of its own. */
+    private fun roomsWithin(rooms: List<Room>, width: Double, height: Double): List<Room> {
+        if (rooms.isEmpty()) return rooms
+        val out = ArrayList<Room>()
+        for (sideways in listOf(false, true)) {
+            var total = 0.0
+            var end = Double.NEGATIVE_INFINITY
+            val room = if (sideways) width else height
+            for (r in rooms.filter { it.sideways == sideways }.sortedBy { it.at }) {
+                if (r.at <= end || total + r.size >= room) continue
+                out += r
+                total += r.size
+                end = r.end
+            }
+        }
+        return out.sortedWith(compareBy<Room>({ it.sideways }, { it.at }))
+    }
+
+    /** The edges an item was cut along, the broken ones left out. */
+    private fun parseCuts(p: JsonPull): List<CutEdge> {
+        if (p.peek() != JsonPull.Token.BEGIN_ARRAY) {
+            p.skipValue()
+            return emptyList()
+        }
+        val out = ArrayList<CutEdge>()
+        p.beginArray()
+        while (p.hasNext()) {
+            val v = doublesOrNull(p) ?: continue
+            if (v.size < 4) continue
+            val len = kotlin.math.hypot(v[2], v[3])
+            if (len > 1e-9) out += CutEdge(v[0], v[1], v[2] / len, v[3] / len)
+        }
+        p.endArray()
+        return out
+    }
+
+    /** A picture's part as written, kept to the picture; null when there is nothing of it left, or all of it. */
+    private fun partWithin(r: Rect): Rect? {
+        val l = r.left.coerceIn(0.0, 1.0)
+        val t = r.top.coerceIn(0.0, 1.0)
+        val rr = r.right.coerceIn(0.0, 1.0)
+        val b = r.bottom.coerceIn(0.0, 1.0)
+        if (rr - l <= 1e-9 || b - t <= 1e-9) return null
+        val part = Rect.ltrb(l, t, rr, b)
+        return if (ImageCrop.isWhole(part)) null else part
     }
 
     private fun rectOrNull(p: JsonPull): Rect? {

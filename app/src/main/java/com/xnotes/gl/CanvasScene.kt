@@ -189,25 +189,14 @@ class CanvasScene(private val store: GeometryStore = GeometryStore()) : GlScene 
     var lastVisibleItems: Int = 0
         private set
 
-    /** Milliseconds the newest tessellation took, published by whoever produced it. */
-    @Volatile
-    var lastTessellateMs: Double = 0.0
-
     override fun describe(into: GlStats): GlStats = into.copy(
         items = records.size,
         visibleItems = lastVisibleItems,
         drawCalls = lastDrawCalls,
-        vertices = store.usedVertices,
-        vertexCapacity = store.vertexCapacity,
-        indices = store.usedIndices,
-        indexCapacity = store.indexCapacity,
         geometryBytes = store.gpuBytes + wetStore.gpuBytes + tailStore.gpuBytes,
         liveGeometryBytes = store.liveBytes + wetStore.liveBytes + tailStore.liveBytes,
-        wetVertices = wetParts.sumOf { it.slice.vertexCount } + tailParts.sumOf { it.slice.vertexCount },
         textures = textures.textureCount,
         textureBytes = textures.residentBytes,
-        texturesPending = textures.pendingCount,
-        lastTessellateMs = lastTessellateMs,
     )
 
     // --- main-thread API ---
@@ -694,8 +683,9 @@ class CanvasScene(private val store: GeometryStore = GeometryStore()) : GlScene 
     ) {
         val shader = imageShader ?: return
         val rect = image.rect.translate(lift.dx, lift.dy)
-        // Decode for the size the image actually occupies on screen right now.
-        val onScreenEdge = (maxOf(rect.w, rect.h) * frame.zoom).toInt().coerceAtLeast(1)
+        // Decode for the size the image actually occupies on screen right now; a slice of it, that much larger.
+        val share = image.part?.let { minOf(it.w, it.h) }?.takeIf { it > 0.0 } ?: 1.0
+        val onScreenEdge = (maxOf(rect.w, rect.h) / share * frame.zoom).toInt().coerceAtLeast(1)
         val texture = textures.textureFor(image.image, onScreenEdge, decodeOn)
         if (texture == 0) return
         val corners = FloatArray(8)
@@ -721,7 +711,7 @@ class CanvasScene(private val store: GeometryStore = GeometryStore()) : GlScene 
             corners[2 * i] = (dx / frame.widthPx * 2.0 - 1.0).toFloat()
             corners[2 * i + 1] = (1.0 - dy / frame.heightPx * 2.0).toFloat()
         }
-        shader.draw(corners, texture, image.orientation / 90, alpha)
+        shader.draw(corners, texture, image.orientation / 90, alpha, image.part)
         lastDrawCalls++
     }
 

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
@@ -28,7 +29,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -58,9 +58,11 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
@@ -87,6 +89,7 @@ import com.xnotes.settings.MaterialColourMode
 import com.xnotes.settings.SwatchRole
 import com.xnotes.ui.icons.XnotesIcons
 import com.xnotes.ui.theme.LocalPalette
+import com.xnotes.ui.theme.nested
 import com.xnotes.ui.theme.toComposeColor
 import kotlinx.coroutines.delay
 
@@ -253,7 +256,7 @@ fun PreferencesPane(
             )
             PdfExportPreferencesSection(prefs = prefs, onUpdateHome = ::updateHome)
             CloudSyncPreferencesSection(prefs = prefs, onUpdate = ::update)
-            PerformancePreferencesSection(prefs = prefs, onUpdate = ::update)
+            PerformancePreferencesSection(prefs = prefs, editor = editor, onUpdate = ::update)
             if (editor.treeSitterAvailable) {
                 CodeHighlightingPreferencesSection(
                     prefs = prefs,
@@ -544,6 +547,83 @@ internal fun ColorPickerDot(
     }
 }
 
+/**
+ * "None, or a colour" as one control: [noneLabel] (Off, Default, Auto) beside the colour, each a
+ * tap away. A tap on the colour while it is chosen opens [picker]. While none is chosen the colour
+ * side shows the one last used here, else [suggested], and a tap brings that back.
+ */
+@Composable
+internal fun ColorOrNone(
+    noneLabel: String,
+    value: Rgba?,
+    suggested: Rgba,
+    onChange: (Rgba?) -> Unit,
+    picker: @Composable (onDismiss: () -> Unit, onPick: (Rgba) -> Unit) -> Unit,
+) {
+    val palette = LocalPalette.current
+    val label = stringResource(R.string.material_custom_colour)
+    var kept by remember { mutableStateOf<Rgba?>(null) }
+    var open by remember { mutableStateOf(false) }
+    val on = value != null
+    val shown = value ?: kept ?: suggested
+    val outer = MaterialTheme.shapes.small
+    val inner = outer.nested(3.dp, LocalDensity.current)
+    val chosen = palette.selectionBackground.toComposeColor()
+    val onChosen = palette.selectionForeground.toComposeColor()
+    Row(
+        Modifier
+            .height(36.dp)
+            .clip(outer)
+            .background(palette.bg.toComposeColor())
+            .border(1.dp, palette.border.toComposeColor(), outer)
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Box(
+            Modifier
+                .fillMaxHeight()
+                .clip(inner)
+                .background(if (on) Color.Transparent else chosen)
+                .semantics { selected = !on }
+                .clickable(role = Role.RadioButton) {
+                    kept = value ?: kept
+                    onChange(null)
+                }
+                .padding(horizontal = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                noneLabel,
+                color = if (on) palette.textDim.toComposeColor() else onChosen,
+                fontSize = 13.sp,
+                fontWeight = if (on) FontWeight.Normal else FontWeight.Medium,
+                maxLines = 1,
+            )
+        }
+        Box {
+            Row(
+                Modifier
+                    .width(52.dp)
+                    .fillMaxHeight()
+                    .clip(inner)
+                    .background(if (on) chosen else Color.Transparent)
+                    .semantics {
+                        selected = on
+                        contentDescription = label
+                    }
+                    .clickable(role = Role.RadioButton) { if (on) open = true else onChange(shown) },
+                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(18.dp).clip(CircleShape).background(shown.toComposeColor()).border(1.dp, palette.border.toComposeColor(), CircleShape))
+                if (on) Icon(XnotesIcons.chevronDown, null, tint = onChosen, modifier = Modifier.size(12.dp))
+            }
+            // The picker edits live across several taps, so it stays until a tap outside.
+            if (open) picker({ open = false }, { onChange(it) })
+        }
+    }
+}
+
 /** Where each [SwatchRole]'s circles are kept: the settings file, shared by every row of that role. */
 interface SwatchStore {
     fun swatches(role: SwatchRole): List<Rgba>
@@ -575,24 +655,19 @@ internal fun SwatchCircles(store: SwatchStore, role: SwatchRole, selected: Rgba?
 /**
  * The colour-code picker shown inside a note/folder's overflow menu: a None row to clear the colour,
  * then the picker's full matrix (pale tints through near-black plus the greyscale row). [onPick] is
- * called with null for None. Rendered directly inside the menu's own dropdown column.
+ * called with null for None. Rendered directly inside the menu's own dropdown column, under a row
+ * leading back to the menu's own rows when it has them ([onBack]).
  */
 @Composable
-internal fun ColorCodeMenuContent(onPick: (Rgba?) -> Unit) {
+internal fun ColorCodeMenuContent(onBack: (() -> Unit)? = null, onPick: (Rgba?) -> Unit) {
     val palette = LocalPalette.current
-    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(
-            Modifier.clip(MaterialTheme.shapes.extraSmall).clickable { onPick(null) }.padding(vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                Modifier.size(20.dp).clip(RoundedCornerShape(2.dp))
-                    .border(1.dp, palette.border.toComposeColor(), RoundedCornerShape(2.dp)),
-            )
-            Text(stringResource(R.string.none), color = palette.text.toComposeColor(), fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
-        }
-        FullSwatchGrid { onPick(it) }
-    }
+    if (onBack != null) MenuBack(stringResource(R.string.colour_code), onBack)
+    DropdownMenuItem(
+        text = { Text(stringResource(R.string.none)) },
+        onClick = { onPick(null) },
+        leadingIcon = { Box(Modifier.size(18.dp).border(1.5.dp, palette.textDim.toComposeColor(), CircleShape)) },
+    )
+    Box(Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 4.dp)) { FullSwatchGrid { onPick(it) } }
 }
 
 /**
@@ -654,7 +729,7 @@ internal fun OptionDropdown(options: List<Pair<String, String>>, selectedId: Str
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEach { (id, lbl) ->
-                DropdownMenuItem(text = { Text(lbl) }, onClick = { onSelect(id); expanded = false })
+                ChoiceMenuItem(id == selectedId, onClick = { onSelect(id); expanded = false }) { fg -> Text(lbl, color = fg) }
             }
         }
     }

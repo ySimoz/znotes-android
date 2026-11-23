@@ -50,17 +50,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -92,11 +92,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -159,6 +155,7 @@ import com.xnotes.settings.PinnedFolder
 import com.xnotes.ui.icons.XnotesIcons
 import com.xnotes.ui.theme.ColorMath
 import com.xnotes.ui.theme.LocalPalette
+import com.xnotes.ui.theme.nested
 import com.xnotes.ui.theme.toComposeColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -251,6 +248,12 @@ private val SIDEBAR_WIDTH = 264.dp
 private val RAIL_WIDTH = 80.dp
 private val PANE_GUTTER = 16.dp
 private val DRAWER_WIDTH = 296.dp
+
+/** The sidebar's sheet floats this far off the screen's edges, as the floating toolbar does. */
+private val SHEET_MARGIN = 8.dp
+
+/** Sidebar rows sit this far inside the sheet, their corners curving about the sheet's. */
+private val ROW_INSET = 8.dp
 
 /**
  * The home-first layout: the explorer (or Preferences) fills the screen beside the sidebar. Wide
@@ -383,7 +386,12 @@ private fun BackstageContent(
                 enter = slideInHorizontally(animationSpec = tween(SIDEBAR_ANIM_MS), initialOffsetX = { -it }),
                 exit = if (animateClose) slideOutHorizontally(animationSpec = tween(SIDEBAR_ANIM_MS), targetOffsetX = { -it }) else ExitTransition.None,
             ) {
-                BackstageSidebar(Modifier.width(DRAWER_WIDTH), nav, dismissDrawer)
+                // Flush with the screen's edge, so only its open side is rounded.
+                val shape = MaterialTheme.shapes.large.copy(topStart = CornerSize(0.dp), bottomStart = CornerSize(0.dp))
+                BackstageSidebar(
+                    Modifier.width(DRAWER_WIDTH).background(palette.menuBg.toComposeColor(), shape).clip(shape).padding(vertical = SHEET_MARGIN),
+                    nav, dismissDrawer,
+                )
             }
         }
     } else {
@@ -410,8 +418,8 @@ private fun BackstageContent(
             // Both stay composed so a fold never pays to build one; only the current one is measured and placed.
             Layout(
                 content = {
-                    BackstageRail(Modifier.width(RAIL_WIDTH), nav) { setRailed(false) }
-                    BackstageSidebar(Modifier.width(SIDEBAR_WIDTH), nav) { setRailed(true) }
+                    BackstageRail(Modifier.width(RAIL_WIDTH - SHEET_MARGIN), nav) { setRailed(false) }
+                    BackstageSidebar(Modifier.width(SIDEBAR_WIDTH - SHEET_MARGIN), nav) { setRailed(true) }
                 },
                 modifier = Modifier
                     .fillMaxHeight()
@@ -420,8 +428,8 @@ private fun BackstageContent(
                         val placeable = measurable.measure(constraints.copy(minWidth = w, maxWidth = w))
                         layout(w, placeable.height) { placeable.place(0, 0) }
                     }
-                    .background(palette.panel.toComposeColor())
-                    .clipToBounds(),
+                    .padding(start = SHEET_MARGIN, top = SHEET_MARGIN, bottom = SHEET_MARGIN)
+                    .floatingBar(),
             ) { measurables, constraints ->
                 val shown = measurables[if (railed) 0 else 1].measure(Constraints(maxHeight = constraints.maxHeight, minHeight = constraints.maxHeight))
                 layout(constraints.maxWidth, constraints.maxHeight) { shown.place(0, 0) }
@@ -481,13 +489,13 @@ private class SidebarNav(
     val onOpenTreeFile: (String) -> Unit,
 )
 
-/** The full sidebar: a pane on wide screens, a slide-over drawer on phones. */
+/** The full sidebar, drawn on the surface its caller gives it: a floating sheet on wide screens, a slide-over drawer on phones. */
 @Composable
 private fun BackstageSidebar(modifier: Modifier, nav: SidebarNav, onCollapse: () -> Unit) {
     val palette = LocalPalette.current
-    Column(modifier.fillMaxHeight().background(palette.panel.toComposeColor()).padding(vertical = 12.dp)) {
+    Column(modifier.fillMaxHeight().padding(vertical = 8.dp)) {
         Row(
-            Modifier.fillMaxWidth().padding(start = 18.dp, end = 6.dp, bottom = 6.dp),
+            Modifier.fillMaxWidth().padding(start = 20.dp, end = 2.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("zNotes", color = palette.text.toComposeColor(), fontWeight = FontWeight.Bold, fontSize = 18.sp)
@@ -498,7 +506,7 @@ private fun BackstageSidebar(modifier: Modifier, nav: SidebarNav, onCollapse: ()
                 }
             }
         }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(4.dp))
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             Command(XnotesIcons.home, stringResource(R.string.home), selected = nav.homeSelected) { nav.onHome() }
             nav.recent?.let { on -> Command(XnotesIcons.clock, stringResource(R.string.recent), selected = on) { nav.onRecent() } }
@@ -546,12 +554,12 @@ private fun BackstageSidebar(modifier: Modifier, nav: SidebarNav, onCollapse: ()
     }
 }
 
-/** The sidebar collapsed to icons on wide screens; its menu button expands it back. */
+/** The sidebar collapsed to icons on wide screens, on the same floating sheet; its menu button expands it back. */
 @Composable
 private fun BackstageRail(modifier: Modifier, nav: SidebarNav, onExpand: () -> Unit) {
     val palette = LocalPalette.current
     Column(
-        modifier.fillMaxHeight().background(palette.panel.toComposeColor()).padding(vertical = 12.dp),
+        modifier.fillMaxHeight().padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Tooltip(stringResource(R.string.expand_sidebar), side = TipSide.RIGHT) {
@@ -559,7 +567,7 @@ private fun BackstageRail(modifier: Modifier, nav: SidebarNav, onExpand: () -> U
                 Icon(XnotesIcons.menu, stringResource(R.string.expand_sidebar), tint = palette.text.toComposeColor(), modifier = Modifier.size(24.dp))
             }
         }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(6.dp))
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
             RailItem(XnotesIcons.home, stringResource(R.string.home), selected = nav.homeSelected) { nav.onHome() }
             nav.recent?.let { on -> RailItem(XnotesIcons.clock, stringResource(R.string.recent), selected = on) { nav.onRecent() } }
@@ -570,7 +578,7 @@ private fun BackstageRail(modifier: Modifier, nav: SidebarNav, onExpand: () -> U
                     Box {
                         RailItem(XnotesIcons.folder, pin.name, selected = i == nav.activePin, labelled = true, onLongClick = { menuOpen = true }) { nav.onOpenPin(pin) }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                            DropdownMenuItem(text = { Text(stringResource(R.string.unpin_from_sidebar)) }, onClick = { menuOpen = false; nav.onUnpin(pin) })
+                            MenuItem(stringResource(R.string.unpin_from_sidebar), XnotesIcons.pin, onClick = { menuOpen = false; nav.onUnpin(pin) })
                         }
                     }
                 }
@@ -685,20 +693,32 @@ private fun BackstageMain(
 
 // --- left rail ---
 
+/** A sidebar row's pill, inset in the sheet on the usual 48dp pitch and filled when [selected]; the caller adds its click and content padding. */
+@Composable
+private fun Modifier.sidebarRow(selected: Boolean): Modifier {
+    val shape = MaterialTheme.shapes.large.nested(ROW_INSET, LocalDensity.current)
+    return fillMaxWidth()
+        .padding(horizontal = ROW_INSET, vertical = 2.dp)
+        .height(44.dp)
+        .clip(shape)
+        .then(if (selected) Modifier.background(LocalPalette.current.selectionBackground.toComposeColor()) else Modifier)
+}
+
+/** Content padding inside a sidebar row's pill, wider on the text side (see the menus' rows). */
+private val SIDEBAR_ROW_PADDING = PaddingValues(start = 12.dp, end = 16.dp)
+
 @Composable
 private fun Command(icon: ImageVector, label: String, selected: Boolean = false, count: String? = null, onClick: () -> Unit) {
     val palette = LocalPalette.current
     Row(
         Modifier
-            .fillMaxWidth()
-            .height(48.dp)
-            .then(if (selected) Modifier.background(palette.selectionBackground.toComposeColor()) else Modifier)
+            .sidebarRow(selected)
             .clickable(onClick = onClick)
-            .padding(horizontal = 18.dp),
+            .padding(SIDEBAR_ROW_PADDING),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, contentDescription = label, tint = (if (selected) palette.selectionForeground else palette.accent).toComposeColor(), modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(16.dp))
+        Spacer(Modifier.width(14.dp))
         Text(
             label,
             color = if (selected) palette.selectionForeground.toComposeColor() else palette.text.toComposeColor(),
@@ -718,7 +738,7 @@ private fun RailItem(icon: ImageVector, label: String, selected: Boolean = false
     val pill = MaterialTheme.shapes.large
     val item = @Composable {
         Column(
-            Modifier.width(RAIL_WIDTH).combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(top = if (labelled) 6.dp else 8.dp, bottom = 8.dp),
+            Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(top = if (labelled) 6.dp else 8.dp, bottom = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Box(
@@ -754,7 +774,7 @@ private fun SidebarLabel(text: String) {
         fontSize = 12.sp,
         fontWeight = FontWeight.Medium,
         letterSpacing = 0.4.sp,
-        modifier = Modifier.padding(start = 18.dp, top = 16.dp, bottom = 6.dp),
+        modifier = Modifier.padding(start = 20.dp, top = 14.dp, bottom = 6.dp),
     )
 }
 
@@ -767,17 +787,15 @@ private fun ColorCommand(color: Rgba, name: String, selected: Boolean, onClick: 
     Box {
         Row(
             Modifier
-                .fillMaxWidth()
-                .height(48.dp)
-                .then(if (selected) Modifier.background(palette.selectionBackground.toComposeColor()) else Modifier)
+                .sidebarRow(selected)
                 .combinedClickable(onClick = onClick, onLongClick = { menuOpen = true })
-                .padding(horizontal = 18.dp),
+                .padding(SIDEBAR_ROW_PADDING),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
                 Box(Modifier.size(12.dp).clip(CircleShape).background(codeOutline(color, palette.isDark).toComposeColor()))
             }
-            Spacer(Modifier.width(16.dp))
+            Spacer(Modifier.width(14.dp))
             Text(
                 name,
                 color = (if (selected) palette.selectionForeground else palette.text).toComposeColor(),
@@ -788,8 +806,8 @@ private fun ColorCommand(color: Rgba, name: String, selected: Boolean, onClick: 
             )
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            DropdownMenuItem(text = { Text(stringResource(R.string.rename)) }, onClick = { menuOpen = false; onRename() })
-            DropdownMenuItem(text = { Text(stringResource(R.string.remove_name)) }, onClick = { menuOpen = false; onForget() })
+            MenuItem(stringResource(R.string.rename), XnotesIcons.edit, onClick = { menuOpen = false; onRename() })
+            MenuItem(stringResource(R.string.remove_name), XnotesIcons.close, onClick = { menuOpen = false; onForget() })
         }
     }
 }
@@ -821,15 +839,13 @@ private fun PinnedCommand(label: String, selected: Boolean, onClick: () -> Unit,
     Box {
         Row(
             Modifier
-                .fillMaxWidth()
-                .height(48.dp)
-                .then(if (selected) Modifier.background(palette.selectionBackground.toComposeColor()) else Modifier)
+                .sidebarRow(selected)
                 .combinedClickable(onClick = onClick, onLongClick = { menuOpen = true })
-                .padding(horizontal = 18.dp),
+                .padding(SIDEBAR_ROW_PADDING),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(XnotesIcons.folder, null, tint = (if (selected) palette.selectionForeground else palette.accent).toComposeColor(), modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(16.dp))
+            Spacer(Modifier.width(14.dp))
             Text(
                 label,
                 color = (if (selected) palette.selectionForeground else palette.text).toComposeColor(),
@@ -840,14 +856,14 @@ private fun PinnedCommand(label: String, selected: Boolean, onClick: () -> Unit,
             )
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            DropdownMenuItem(text = { Text(stringResource(R.string.unpin_from_sidebar)) }, onClick = { menuOpen = false; onUnpin() })
+            MenuItem(stringResource(R.string.unpin_from_sidebar), XnotesIcons.pin, onClick = { menuOpen = false; onUnpin() })
         }
     }
 }
 
 @Composable
 private fun RailDivider() {
-    HorizontalDivider(color = LocalPalette.current.border.toComposeColor(), modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp))
+    HorizontalDivider(color = LocalPalette.current.border.toComposeColor(), modifier = Modifier.padding(horizontal = ROW_INSET, vertical = 8.dp))
 }
 
 /** One row of the explorer's "Sort by" menu: a check and direction arrow mark the active field. */
@@ -885,19 +901,14 @@ private fun NewItemMenuItems(
     onCreateMode: (CreateMode) -> Unit,
     onImportPdf: () -> Unit,
 ) {
-    val tint = LocalPalette.current.text.toComposeColor()
-    // Taller than a default menu row (the explorer's primary create affordance), but only as wide
-    // as the longest label plus a margin. The end padding is the larger of the two on purpose: the
-    // icons carry ~1dp of their own inset, so an equal split reads as tight on the text side.
-    val row = Modifier.height(52.dp)
-    val pad = PaddingValues(start = 14.dp, end = 18.dp)
+    val tint = LocalPalette.current.accent.toComposeColor()
+    // Taller and larger than a plain row: this is the explorer's primary create affordance.
     @Composable
     fun item(icon: ImageVector, label: String, onPick: () -> Unit) = DropdownMenuItem(
-        text = { Text(label, fontSize = 16.sp) },
+        text = { Text(label, fontSize = 15.sp) },
         leadingIcon = { Icon(icon, null, tint = tint, modifier = Modifier.size(21.dp)) },
         onClick = { onClose(); onPick() },
-        modifier = row,
-        contentPadding = pad,
+        modifier = Modifier.height(50.dp),
     )
     item(XnotesIcons.edit, stringResource(R.string.new_note_menu)) { onCreateMode(CreateMode.FILE) }
     item(XnotesIcons.canvas, stringResource(R.string.new_canvas_menu)) { onCreateMode(CreateMode.CANVAS) }
@@ -1197,7 +1208,7 @@ private fun ExplorerSection(
             metaTick++
         }
     }
-    val kindOf: (BrowseEntry) -> EntryKind = { entryKind(it, editor.cachedMeta(it)) }
+    val kindOf: (BrowseEntry) -> EntryKind = { entryKind(it) }
     val withCreated: (BrowseEntry) -> BrowseEntry = { e -> editor.createdOf(e).let { if (it == e.created) e else e.copy(created = it) } }
     val arrange: (List<BrowseEntry>) -> List<BrowseEntry> = remember(view.sortKey, view.descending, view.folders, kindFilter, metaTick) {
         { list ->
@@ -1397,6 +1408,7 @@ private fun ExplorerSection(
                 share = { callsNow.value.shareFile(it.documentUri) },
                 saveCopy = { callsNow.value.saveCopyFile(it.documentUri) },
                 exportPdf = { callsNow.value.exportFilePdf(it.documentUri) },
+                convert = { e -> editor.convertDocument(e.documentUri) { refreshKey++ } },
                 preview = { previewing = it },
                 openBeside = { e -> callsNow.value.openBeside(e.documentUri) },
             ),
@@ -1824,8 +1836,8 @@ private fun ExplorerSection(
                     var optionsOpen by remember { mutableStateOf(false) }
                     Box(Modifier.floatingBacking(liftNow, CircleShape, floatFill, floatEdge)) {
                         ExplorerIcon(XnotesIcons.sliders, stringResource(R.string.view_options)) { optionsOpen = true }
-                        DropdownMenu(expanded = optionsOpen, onDismissRequest = { optionsOpen = false }) {
-                            ViewOptionsContent(
+                        if (optionsOpen) {
+                            ViewOptionsMenu(
                                 view = view.copy(layout = layout),
                                 layouts = ExplorerLayout.entries.filter { !(compactScreen && it == ExplorerLayout.COLUMNS) },
                                 everyFolder = !prefs.perFolderViews,
@@ -1833,7 +1845,7 @@ private fun ExplorerSection(
                                 onChange = { v -> setView(if (v.layout == layout) v.copy(layout = view.layout) else v); if (v.layout != layout) columnsPick = null },
                                 onReset = { editor.setView(folderKey, null) },
                                 onEveryFolder = { every -> editor.applyHomePreferences(editor.preferences.copy(perFolderViews = !every)) },
-                                onClose = { optionsOpen = false },
+                                onDismiss = { optionsOpen = false },
                             )
                         }
                     }
@@ -1843,13 +1855,13 @@ private fun ExplorerSection(
                         ExplorerIcon(XnotesIcons.more, stringResource(R.string.more)) { moreOpen = true }
                         DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
                             NewItemMenuItems({ moreOpen = false }, onCreateMode, calls.importPdf)
-                            HorizontalDivider(color = palette.border.toComposeColor())
+                            MenuDivider()
                             clipboard?.let { clip ->
-                                DropdownMenuItem(text = { Text(pluralStringResource(R.plurals.paste_items_here, clip.entries.size, clip.entries.size)) }, onClick = { moreOpen = false; paste(clip) })
+                                MenuItem(pluralStringResource(R.plurals.paste_items_here, clip.entries.size, clip.entries.size), XnotesIcons.paste, onClick = { moreOpen = false; paste(clip) })
                             }
-                            DropdownMenuItem(text = { Text(stringResource(R.string.select_all)) }, onClick = { moreOpen = false; selection.clear(); selection.addAll(arranged.orEmpty()) })
-                            DropdownMenuItem(text = { Text(stringResource(R.string.change_folder)) }, onClick = { moreOpen = false; calls.pickRoot() })
-                            DropdownMenuItem(text = { Text(stringResource(R.string.forget_folder)) }, onClick = { moreOpen = false; editor.clearBrowseRoot() })
+                            MenuItem(stringResource(R.string.select_all), XnotesIcons.selectAll, onClick = { moreOpen = false; selection.clear(); selection.addAll(arranged.orEmpty()) })
+                            MenuItem(stringResource(R.string.change_folder), XnotesIcons.folder, onClick = { moreOpen = false; calls.pickRoot() })
+                            MenuItem(stringResource(R.string.forget_folder), XnotesIcons.close, onClick = { moreOpen = false; editor.clearBrowseRoot() })
                         }
                     }
                 }
@@ -1876,49 +1888,56 @@ private fun ExplorerSection(
                         ExplorerIcon(XnotesIcons.more, stringResource(R.string.more), fg) { moreOpen = true }
                         DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
                             if (colours) {
-                                ColorCodeMenuContent { c -> moreOpen = false; recolor(selection.toList(), c); selection.clear() }
+                                ColorCodeMenuContent({ colours = false }) { c -> moreOpen = false; recolor(selection.toList(), c); selection.clear() }
                             } else {
                                 // A lone item gets the rest of its own ⋮ here too, since the gallery, timeline and columns draw none.
                                 val one = selection.singleOrNull()
                                 if (one != null && !one.isDir) {
-                                    DropdownMenuItem(text = { Text(stringResource(R.string.preview)) }, onClick = { moreOpen = false; selection.clear(); previewing = one })
+                                    MenuItem(stringResource(R.string.preview), XnotesIcons.eye, onClick = { moreOpen = false; selection.clear(); previewing = one })
                                 }
-                                DropdownMenuItem(text = { Text(stringResource(R.string.cut)) }, onClick = {
+                                MenuItem(stringResource(R.string.cut), XnotesIcons.cut, onClick = {
                                     moreOpen = false
                                     clipboard = ClipItem(selection.toList(), true)
                                     selection.clear()
                                 })
-                                DropdownMenuItem(text = { Text(stringResource(R.string.colour_code)) }, onClick = { colours = true })
+                                MenuItem(stringResource(R.string.colour_code), XnotesIcons.palette, more = true, onClick = { colours = true })
                                 if (one != null) {
                                     one.color?.let { c ->
-                                        DropdownMenuItem(text = { Text(stringResource(R.string.name_colour_ellipsis)) }, onClick = { moreOpen = false; selection.clear(); namingColor = c })
+                                        MenuItem(stringResource(R.string.name_colour_ellipsis), XnotesIcons.text, onClick = { moreOpen = false; selection.clear(); namingColor = c })
                                     }
                                     val pinLabel = if (one.isDir) {
                                         if (editor.isPinned(one.documentUri)) R.string.unpin_from_sidebar else R.string.pin_to_sidebar
                                     } else {
                                         if (editor.isNotePinned(one.documentUri)) R.string.unpin_from_top else R.string.pin_to_top
                                     }
-                                    DropdownMenuItem(text = { Text(stringResource(pinLabel)) }, onClick = {
+                                    MenuItem(stringResource(pinLabel), XnotesIcons.pin, onClick = {
                                         moreOpen = false
                                         selection.clear()
                                         if (one.isDir) host.menu.togglePin(one) else host.menu.toggleNotePin(one)
                                     })
-                                    if (!one.isDir) HorizontalDivider(color = palette.border.toComposeColor())
+                                    if (!one.isDir) MenuDivider()
                                 }
-                                DropdownMenuItem(text = { Text(stringResource(R.string.share)) }, enabled = files.size == selection.size, onClick = {
+                                MenuItem(stringResource(R.string.share), XnotesIcons.share, enabled = files.size == selection.size, onClick = {
                                     moreOpen = false
                                     val uris = files.map { it.documentUri }
                                     selection.clear()
                                     if (uris.size == 1) calls.shareFile(uris[0]) else calls.shareFiles(uris)
                                 })
                                 if (one != null && !one.isDir) {
-                                    DropdownMenuItem(text = { Text(stringResource(R.string.save_copy_ellipsis)) }, onClick = { moreOpen = false; selection.clear(); calls.saveCopyFile(one.documentUri) })
-                                    DropdownMenuItem(text = { Text(stringResource(R.string.export_pdf)) }, onClick = { moreOpen = false; selection.clear(); calls.exportFilePdf(one.documentUri) })
+                                    MenuItem(stringResource(R.string.save_copy_ellipsis), XnotesIcons.save, onClick = { moreOpen = false; selection.clear(); calls.saveCopyFile(one.documentUri) })
+                                    MenuItem(stringResource(R.string.export_pdf), XnotesIcons.pdfFile, onClick = { moreOpen = false; selection.clear(); calls.exportFilePdf(one.documentUri) })
+                                    convertLabel(one)?.let { label ->
+                                        MenuItem(stringResource(label), XnotesIcons.exportDoc, onClick = {
+                                            moreOpen = false
+                                            selection.clear()
+                                            editor.convertDocument(one.documentUri) { refreshKey++ }
+                                        })
+                                    }
                                 }
-                                // Only notes merge: a canvas has no pages, a folder no one order.
-                                val notes = selection.filter { !it.isDir && com.xnotes.core.util.DocumentKind.ofName(it.name) == com.xnotes.core.util.DocumentKind.NOTE }
+                                // Notes and PDFs merge: a canvas has no pages, a folder no one order.
+                                val notes = selection.filter { !it.isDir && com.xnotes.core.util.DocumentKind.ofName(it.name).let { k -> k == com.xnotes.core.util.DocumentKind.NOTE || k == com.xnotes.core.util.DocumentKind.PDF } }
                                 if (notes.size >= 2 && notes.size == selection.size) {
-                                    DropdownMenuItem(text = { Text(stringResource(R.string.merge_ellipsis)) }, onClick = {
+                                    MenuItem(stringResource(R.string.merge_ellipsis), XnotesIcons.layers, onClick = {
                                         moreOpen = false
                                         merging = notes.toList()
                                     })
@@ -1947,12 +1966,26 @@ private fun ExplorerSection(
     // at a time, taking each note's name from its source. This runs here because the explorer is
     // where the target folder is known. Cancelling keeps whatever already landed.
     val pendingImports = editor.pendingImports
-    LaunchedEffect(pendingImports) {
-        if (pendingImports.isNotEmpty()) {
-            val n = editor.commitImportsAsync(root, currentDocId)
-            refreshKey++
-            if (n > 0) editor.message = context.resources.getQuantityString(R.plurals.imported_pdfs, n, n)
+    if (pendingImports.isNotEmpty() && !editor.importing) {
+        // Asked once for all of them: each stays a PDF, or each becomes a note.
+        fun land(asPdf: Boolean) {
+            scope.launch {
+                val n = editor.commitImportsAsync(root, currentDocId, asPdf)
+                refreshKey++
+                if (n > 0) editor.message = context.resources.getQuantityString(R.plurals.imported_pdfs, n, n)
+            }
         }
+        SheetDialog(
+            title = pluralStringResource(R.plurals.import_pdfs_title, pendingImports.size, pendingImports.size),
+            onDismiss = { editor.requestImports(emptyList()) },
+            foot = {
+                DialogButtons {
+                    DialogButton(stringResource(R.string.keep_as_pdf), ButtonKind.CHOICE) { land(asPdf = true) }
+                    DialogButton(stringResource(R.string.make_a_note), ButtonKind.CHOICE) { land(asPdf = false) }
+                }
+                SheetButton(stringResource(R.string.cancel), Modifier.fillMaxWidth()) { editor.requestImports(emptyList()) }
+            },
+        )
     }
 
     val pendingImport = editor.pendingImport
@@ -1963,7 +1996,6 @@ private fun ExplorerSection(
         var busy by remember { mutableStateOf(false) }
         NewNoteScreen(
             editor = editor,
-            folderName = stack.lastOrNull()?.second ?: rootName ?: stringResource(R.string.folder),
             initialName = remember { nextUntitled(editor, editor.cachedChildren(root, currentDocId)) },
             error = fieldError,
             busy = busy,
@@ -2029,7 +2061,24 @@ private fun ExplorerSection(
                 else -> stringResource(R.string.new_note)
             },
             initial = default,
-            confirmLabel = if (pendingImport != null) stringResource(R.string.save) else stringResource(R.string.create),
+            confirmLabel = when {
+                pendingImport == null -> stringResource(R.string.create)
+                pendingImport.markdown -> stringResource(R.string.save)
+                else -> stringResource(R.string.make_a_note)
+            },
+            // A PDF coming in stays a PDF or becomes a note, asked every time; text only ever becomes a note.
+            secondLabel = if (pendingImport != null && !pendingImport.markdown) stringResource(R.string.keep_as_pdf) else null,
+            onSecond = { n ->
+                scope.launch {
+                    val uri = editor.commitImportAsync(root, currentDocId, n, asPdf = true)
+                    when {
+                        uri != null -> refreshKey++
+                        editor.pendingImport != null -> fieldError = context.getString(
+                            if (editor.lastImportError == PdfOpenError.PASSWORD) R.string.err_pdf_password else R.string.err_save_that_note,
+                        )
+                    }
+                }
+            },
             placeholder = if (isFolder) stringResource(R.string.folder_name) else null,
             allowEmpty = !isFolder, // a folder needs a name; a blank note name becomes "untitled_N"
             error = fieldError,
@@ -2115,17 +2164,13 @@ private fun ExplorerSection(
     previewing?.let { e -> FilePreviewDialog(body, e, pathText.takeIf { !flat }, previewActions(e)) { previewing = null } }
 
     pendingDelete?.let { targets ->
-        AlertDialog(
-            onDismissRequest = { pendingDelete = null },
-            title = { Text(stringResource(R.string.delete_confirm_title)) },
-            text = {
-                Text(
-                    if (targets.size == 1) stringResource(R.string.delete_one_confirm, entryLabel(targets.first()))
-                    else pluralStringResource(R.plurals.delete_items_confirm, targets.size, targets.size),
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
+        SheetDialog(
+            title = stringResource(R.string.delete_confirm_title),
+            onDismiss = { pendingDelete = null },
+            text = if (targets.size == 1) stringResource(R.string.delete_one_confirm, entryLabel(targets.first()))
+            else pluralStringResource(R.plurals.delete_items_confirm, targets.size, targets.size),
+            foot = {
+                ConfirmButtons(stringResource(R.string.delete), { pendingDelete = null }, ButtonKind.DESTROY) {
                     val items = targets.toList()
                     pendingDelete = null; selection.clear(); opError = null
                     scope.launch {
@@ -2145,9 +2190,8 @@ private fun ExplorerSection(
                         refreshKey++
                         if (!allOk) opError = context.getString(R.string.err_delete_some)
                     }
-                }) { Text(stringResource(R.string.delete)) }
+                }
             },
-            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 }
@@ -2272,6 +2316,8 @@ internal fun EntryMenu(
     onShare: (() -> Unit)? = null,
     onSaveCopy: (() -> Unit)? = null,
     onExportPdf: (() -> Unit)? = null,
+    convertLabel: Int? = null,
+    onConvert: (() -> Unit)? = null,
     onColor: ((Rgba?) -> Unit)? = null,
     pinned: Boolean = false,
     onTogglePin: (() -> Unit)? = null,
@@ -2294,32 +2340,29 @@ internal fun EntryMenu(
         modifier = Modifier.widthIn(min = 220.dp, max = 360.dp),
     ) {
         if (showColors) {
-            ColorCodeMenuContent { c -> onDismiss(); onColor?.invoke(c) }
+            ColorCodeMenuContent({ showColors = false }) { c -> onDismiss(); onColor?.invoke(c) }
         } else {
-            if (onOpenBeside != null) DropdownMenuItem(
-                text = { Text(stringResource(R.string.open_side_by_side)) },
-                leadingIcon = { Icon(XnotesIcons.split, null, tint = palette.text.toComposeColor(), modifier = Modifier.size(20.dp)) },
-                onClick = { onDismiss(); onOpenBeside() },
-            )
-            if (onPreview != null) DropdownMenuItem(text = { Text(stringResource(R.string.preview)) }, onClick = { onDismiss(); onPreview() })
-            DropdownMenuItem(text = { Text(stringResource(R.string.rename)) }, onClick = { onDismiss(); onRename?.invoke() })
-            if (onMoveTo != null) DropdownMenuItem(text = { Text(stringResource(R.string.move_to_folder)) }, onClick = { onDismiss(); onMoveTo() })
-            DropdownMenuItem(text = { Text(stringResource(R.string.copy)) }, onClick = { onDismiss(); onCopy?.invoke() })
-            DropdownMenuItem(text = { Text(stringResource(R.string.cut)) }, onClick = { onDismiss(); onCut?.invoke() })
-            if (onColor != null) DropdownMenuItem(text = { Text(stringResource(R.string.colour_code)) }, onClick = { showColors = true })
-            if (onNameColor != null) DropdownMenuItem(text = { Text(stringResource(R.string.name_colour)) }, onClick = { onDismiss(); onNameColor() })
+            if (onOpenBeside != null) MenuItem(stringResource(R.string.open_side_by_side), XnotesIcons.split, onClick = { onDismiss(); onOpenBeside() })
+            if (onPreview != null) MenuItem(stringResource(R.string.preview), XnotesIcons.eye, onClick = { onDismiss(); onPreview() })
+            MenuItem(stringResource(R.string.rename), XnotesIcons.edit, onClick = { onDismiss(); onRename?.invoke() })
+            if (onMoveTo != null) MenuItem(stringResource(R.string.move_to_folder_ellipsis), XnotesIcons.moveToFolder, onClick = { onDismiss(); onMoveTo() })
+            MenuItem(stringResource(R.string.copy), XnotesIcons.copy, onClick = { onDismiss(); onCopy?.invoke() })
+            MenuItem(stringResource(R.string.cut), XnotesIcons.cut, onClick = { onDismiss(); onCut?.invoke() })
+            if (onColor != null) MenuItem(stringResource(R.string.colour_code), XnotesIcons.palette, more = true, onClick = { showColors = true })
+            if (onNameColor != null) MenuItem(stringResource(R.string.name_colour_ellipsis), XnotesIcons.text, onClick = { onDismiss(); onNameColor() })
             if (onTogglePin != null) {
-                DropdownMenuItem(text = { Text(if (pinned) stringResource(R.string.unpin_from_sidebar) else stringResource(R.string.pin_to_sidebar)) }, onClick = { onDismiss(); onTogglePin() })
+                MenuItem(if (pinned) stringResource(R.string.unpin_from_sidebar) else stringResource(R.string.pin_to_sidebar), XnotesIcons.pin, onClick = { onDismiss(); onTogglePin() })
             }
             if (onToggleNotePin != null) {
-                DropdownMenuItem(text = { Text(if (notePinned) stringResource(R.string.unpin_from_top) else stringResource(R.string.pin_to_top)) }, onClick = { onDismiss(); onToggleNotePin() })
+                MenuItem(if (notePinned) stringResource(R.string.unpin_from_top) else stringResource(R.string.pin_to_top), XnotesIcons.pin, onClick = { onDismiss(); onToggleNotePin() })
             }
-            DropdownMenuItem(text = { Text(deleteLabel) }, onClick = { onDismiss(); onDelete?.invoke() })
+            MenuItem(deleteLabel, XnotesIcons.trash, danger = true, onClick = { onDismiss(); onDelete?.invoke() })
             if (onShare != null) {
-                HorizontalDivider(color = palette.border.toComposeColor())
-                DropdownMenuItem(text = { Text(stringResource(R.string.share)) }, onClick = { onDismiss(); onShare() })
-                DropdownMenuItem(text = { Text(stringResource(R.string.save_copy)) }, onClick = { onDismiss(); onSaveCopy?.invoke() })
-                DropdownMenuItem(text = { Text(stringResource(R.string.export_pdf)) }, onClick = { onDismiss(); onExportPdf?.invoke() })
+                MenuDivider()
+                MenuItem(stringResource(R.string.share), XnotesIcons.share, onClick = { onDismiss(); onShare() })
+                MenuItem(stringResource(R.string.save_copy_ellipsis), XnotesIcons.save, onClick = { onDismiss(); onSaveCopy?.invoke() })
+                MenuItem(stringResource(R.string.export_pdf), XnotesIcons.pdfFile, onClick = { onDismiss(); onExportPdf?.invoke() })
+                if (convertLabel != null) MenuItem(stringResource(convertLabel), XnotesIcons.exportDoc, onClick = { onDismiss(); onConvert?.invoke() })
             }
         }
     }
@@ -2367,7 +2410,7 @@ private fun DragPreview(editor: Editor, items: List<BrowseEntry>, sizePx: IntSiz
 @Composable
 private fun StackedNoteCard(editor: Editor, entry: BrowseEntry, modifier: Modifier) {
     val palette = LocalPalette.current
-    val thumb = editor.cachedNoteTile(entry.documentUri)
+    val thumb = editor.cachedNoteTile(entry.documentUri, entry.name, entry.modified)
     val shape = MaterialTheme.shapes.medium
     Column(modifier.clip(shape).background(palette.bg.toComposeColor()).border(1.dp, palette.accent.toComposeColor(), shape)) {
         Box(Modifier.fillMaxWidth().weight(1f).background(palette.paper.toComposeColor())) {
@@ -2800,50 +2843,38 @@ private fun NameDialog(
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
     onRemove: (() -> Unit)? = null,
+    /** A second way to confirm, beside [confirmLabel], for a name that can be put to two uses. */
+    secondLabel: String? = null,
+    onSecond: (String) -> Unit = {},
 ) {
-    val palette = LocalPalette.current
     var text by remember { mutableStateOf(TextFieldValue(initial, selection = TextRange(0, initial.length))) }
-    val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     val confirm = {
         val n = text.text.trim()
-        if (allowEmpty || n.isNotEmpty()) onConfirm(n)
+        // With two ways to confirm, the keyboard's Done picks neither: the choice is the user's to make.
+        if (secondLabel == null && (allowEmpty || n.isNotEmpty())) onConfirm(n)
     }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                singleLine = true,
-                isError = error != null,
-                placeholder = placeholder?.let { { Text(it) } },
-                supportingText = error?.let { { Text(it) } },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { confirm() }),
-                modifier = Modifier
-                    .focusRequester(focus)
-                    .onPreviewKeyEvent { ev ->
-                        when {
-                            ev.type != KeyEventType.KeyDown -> false
-                            ev.key == Key.Enter || ev.key == Key.NumPadEnter -> { confirm(); true }
-                            ev.key == Key.Escape -> { onDismiss(); true }
-                            else -> false
-                        }
-                    },
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { confirm() }, enabled = allowEmpty || text.text.isNotBlank()) { Text(confirmLabel) }
-        },
-        dismissButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (onRemove != null) TextButton(onClick = onRemove) { Text(stringResource(R.string.delete)) }
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+    SheetDialog(
+        title = title,
+        onDismiss = onDismiss,
+        foot = {
+            val ready = allowEmpty || text.text.isNotBlank()
+            if (secondLabel != null) {
+                DialogButtons {
+                    DialogButton(secondLabel, ButtonKind.CHOICE, ready) { onSecond(text.text.trim()) }
+                    DialogButton(confirmLabel, ButtonKind.CHOICE, ready) { onConfirm(text.text.trim()) }
+                }
+                SheetButton(stringResource(R.string.cancel), Modifier.fillMaxWidth(), onClick = onDismiss)
+            } else {
+                DialogButtons {
+                    if (onRemove != null) DialogButton(stringResource(R.string.delete), ButtonKind.DISCARD, onClick = onRemove)
+                    DialogButton(stringResource(R.string.cancel), onClick = onDismiss)
+                    DialogButton(confirmLabel, ButtonKind.CONFIRM, ready) { onConfirm(text.text.trim()) }
+                }
             }
         },
-    )
+    ) {
+        DialogField(text, { text = it }, placeholder = placeholder, error = error, autoFocus = true, onDone = confirm, onEscape = onDismiss)
+    }
 }
 
 private const val PRESS_FILL_MS = 120L

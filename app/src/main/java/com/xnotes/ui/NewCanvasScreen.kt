@@ -384,7 +384,7 @@ private fun CanvasTuneControls(
 
         Spacer(Modifier.height(12.dp))
         val pct = background.patternColor.a * 100f / 255f
-        Text(stringResource(R.string.caption_opacity_percent, pct.roundToInt()), color = dim, fontSize = 13.sp)
+        Text("${stringResource(R.string.caption_opacity)}  ${pct.roundToInt()}%", color = dim, fontSize = 13.sp)
         Spacer(Modifier.height(4.dp))
         Slider(
             value = pct,

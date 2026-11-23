@@ -462,22 +462,35 @@ internal fun PdfExportPreferencesSection(
 }
 
 /**
- * Performance preferences section: max cache resolution and front buffering toggles.
+ * Performance preferences section: page cache memory budget and front buffering toggles.
  */
 @Composable
 internal fun PerformancePreferencesSection(
     prefs: Preferences,
+    editor: Editor,
     onUpdate: (Preferences) -> Unit,
 ) {
     val palette = LocalPalette.current
     HorizontalDivider(color = palette.border.toComposeColor())
     SectionTitle(stringResource(R.string.pref_performance))
-    FieldLabel(stringResource(R.string.pref_max_cache_px, prefs.maxCacheResolution))
+    // The first stop is Automatic; the rest run from the least a user may set to the most this device allows.
+    val cacheMin = com.xnotes.canvas.CacheBudget.MIN_MB
+    val cacheStep = com.xnotes.canvas.CacheBudget.STEP_MB
+    val cacheStops = (editor.maxCacheMemoryMb() - cacheMin) / cacheStep + 1
+    val cacheStop = if (prefs.cacheMemoryMb <= 0) 0 else ((prefs.cacheMemoryMb - cacheMin) / cacheStep + 1).coerceIn(1, cacheStops)
+    FieldLabel(
+        if (cacheStop == 0) stringResource(R.string.pref_cache_memory_auto, (editor.automaticCacheBudget() shr 20).toInt())
+        else stringResource(R.string.pref_cache_memory_mb, cacheMin + (cacheStop - 1) * cacheStep),
+    )
     Slider(
-        value = prefs.maxCacheResolution.toFloat(),
-        onValueChange = { onUpdate(prefs.copy(maxCacheResolution = Math.round(it))) },
-        valueRange = 1024f..4096f,
-        steps = 5,
+        value = cacheStop.toFloat(),
+        onValueChange = {
+            val stop = Math.round(it)
+            onUpdate(prefs.copy(cacheMemoryMb = if (stop == 0) 0 else cacheMin + (stop - 1) * cacheStep))
+        },
+        valueRange = 0f..cacheStops.toFloat(),
+        steps = (cacheStops - 1).coerceAtLeast(0),
+        colors = NoTicks,
         modifier = Modifier.width(280.dp),
     )
     Text(stringResource(R.string.pref_cache_help), color = palette.textDim.toComposeColor(), fontSize = 12.sp)

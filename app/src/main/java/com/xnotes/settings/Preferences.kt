@@ -77,8 +77,8 @@ data class Preferences(
      *  read at both a wall's scale and a hair's. */
     val canvasMinZoomPercent: Int = 2,
     val canvasMaxZoomPercent: Int = 6400,
-    /** Long-edge cap (px) for the on-screen page cache; higher holds more of the page ready at deep zoom. */
-    val maxCacheResolution: Int = 2048,
+    /** Memory (MB) the page caches may hold, or 0 to size it to the device ([com.xnotes.canvas.CacheBudget]). */
+    val cacheMemoryMb: Int = 0,
     /** Whether wet ink keeps off the front buffer, so every stroke takes the ordinary canvas path. */
     val disableFrontBuffering: Boolean = false,
     /** Open in fullscreen; null ⇒ auto (on unless the display has a camera cutout). */
@@ -120,6 +120,8 @@ data class Preferences(
     /** Whether an exported PDF gets a bookmark for each heading of the note's text. */
     val pdfHeadingBookmarks: Boolean = true,
     val driveSync: com.xnotes.sync.DriveSyncPreferences = com.xnotes.sync.DriveSyncPreferences(),
+    /** The View menu's autoscroll speed in tenths of a paper millimetre per second; autoscroll itself always starts off. */
+    val autoScrollSpeed: Int = AUTOSCROLL_DEFAULT,
 ) {
     /**
      * A new note's page size in document pixels. A named size is laid out under
@@ -164,7 +166,7 @@ data class Preferences(
         .put("max_zoom_percent", maxZoomPercent)
         .put("canvas_min_zoom_percent", canvasMinZoomPercent)
         .put("canvas_max_zoom_percent", canvasMaxZoomPercent)
-        .put("max_cache_resolution", maxCacheResolution)
+        .put("cache_memory_mb", cacheMemoryMb)
         .put("disable_front_buffering", disableFrontBuffering)
         .apply {
             if (materialMode != MaterialColourMode.SYSTEM) put("material_mode", materialMode.id)
@@ -210,6 +212,7 @@ data class Preferences(
         .put("show_folder_counts", showFolderCounts)
         .put("show_extensions", showExtensions)
         .put("pdf_heading_bookmarks", pdfHeadingBookmarks)
+        .put("autoscroll_speed", autoScrollSpeed)
 
     companion object {
         /** The accent a two-tone setting saved without a seed of its own has always loaded as. */
@@ -225,6 +228,11 @@ data class Preferences(
 
         /** [trashDays] for keeping deleted items until Trash is emptied by hand. */
         const val TRASH_FOREVER = -1
+
+        /** [autoScrollSpeed] bounds and default, in tenths of a mm per second. */
+        const val AUTOSCROLL_MIN = 1
+        const val AUTOSCROLL_MAX = 100
+        const val AUTOSCROLL_DEFAULT = 20
 
         /** Settable range of the min/max zoom limits, in percent (within the hard zoom bounds). */
         const val ZOOM_LIMIT_MIN_PCT = 20
@@ -306,7 +314,9 @@ data class Preferences(
                 maxZoomPercent = o.optInt("max_zoom_percent", 400).coerceIn(ZOOM_LIMIT_MIN_PCT, ZOOM_LIMIT_MAX_PCT),
                 canvasMinZoomPercent = o.optInt("canvas_min_zoom_percent", 2).coerceIn(1, 100),
                 canvasMaxZoomPercent = o.optInt("canvas_max_zoom_percent", 6400).coerceIn(200, 100000),
-                maxCacheResolution = o.optInt("max_cache_resolution", 2048).coerceIn(1024, 4096),
+                cacheMemoryMb = o.optInt("cache_memory_mb", 0).let {
+                    if (it <= 0) 0 else it.coerceIn(com.xnotes.canvas.CacheBudget.MIN_MB, com.xnotes.canvas.CacheBudget.MAX_MB)
+                },
                 disableFrontBuffering = o.optBoolean("disable_front_buffering", false),
                 startFullscreen = if (o.has("start_fullscreen")) o.getBoolean("start_fullscreen") else null,
                 codeThemePath = o.optString("code_theme_path").ifEmpty { null },
@@ -334,6 +344,7 @@ data class Preferences(
                 showExtensions = o.optBoolean("show_extensions", false),
                 pdfHeadingBookmarks = o.optBoolean("pdf_heading_bookmarks", true),
                 driveSync = com.xnotes.sync.DriveSyncPreferences.fromJson(o.optJSONObject("drive_sync")),
+                autoScrollSpeed = o.optInt("autoscroll_speed", AUTOSCROLL_DEFAULT).coerceIn(AUTOSCROLL_MIN, AUTOSCROLL_MAX),
             )
         }
     }

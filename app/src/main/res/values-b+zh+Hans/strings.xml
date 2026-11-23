@@ -34,16 +34,9 @@
     <string name="toolbar_sidebar">侧边栏</string>
     <string name="undo">撤销</string>
     <string name="redo">重做</string>
-    <string name="toolbar_page_nav">页面导航</string>
-    <string name="toolbar_styles">样式</string>
-    <string name="toolbar_margins">页边距</string>
     <string name="toolbar_view">视图</string>
-    <string name="toolbar_zoom">缩放</string>
-    <string name="toolbar_fit">适应</string>
-    <string name="toolbar_zoom_lock">缩放锁定</string>
     <string name="toolbar_fullscreen">全屏</string>
     <string name="toolbar_colours">颜色</string>
-    <string name="toolbar_waypoints">保存的视图</string>
     <string name="toolbar_minimap">小地图</string>
     <string name="edge_left">左侧</string>
     <string name="edge_right">右侧</string>
@@ -108,8 +101,9 @@
     <string name="view_cover">封面</string>
     <string name="caption_vertical_scrolling">纵向滚动</string>
     <string name="caption_free_movement">页面自由移动</string>
+    <string name="caption_autoscroll">自动滚动</string>
+    <string name="caption_autoscroll_speed">速度</string>
     <string name="caption_pdf_filters">PDF 颜色滤镜</string>
-    <string name="adjust">调整</string>
     <string name="filter_contrast">对比度</string>
     <string name="filter_invert">反色</string>
     <string name="filter_brightness">亮度</string>
@@ -282,8 +276,6 @@
     <string name="caption_opacity">不透明度</string>
     <string name="caption_dashed">虚线笔</string>
     <string name="default_suffix">"  (默认)"</string>
-    <string name="caption_opacity_percent">"不透明度  %1$d%%"</string>
-    <string name="caption_rotate_degrees">"旋转  %1$d°"</string>
     <string name="caption_glow_intensity">发光强度</string>
 
     <!-- Toolbar -->
@@ -304,9 +296,6 @@
     <string name="no_stickers">尚无贴纸。</string>
     <string name="stickers_hint">点按插入，长按移除</string>
     <string name="sticker">贴纸</string>
-    <string name="fit_page">显示完整页面</string>
-    <string name="fit_width">适应页面宽度</string>
-    <string name="fit_height">适应页面高度</string>
     <string name="err_rename_note">无法重命名笔记。</string>
     <string name="untitled">未命名</string>
     <string name="insert_image">插入图片</string>
@@ -377,7 +366,7 @@
     <string name="pref_pdf_export">PDF 导出</string>
     <string name="pref_pdf_heading_bookmarks">根据标题生成书签</string>
     <string name="pref_performance">性能</string>
-    <string name="pref_cache_help">设置越高，平移和缩放越流畅，但会使用更多内存。无论如何设置，墨迹和 PDF 都会保持清晰。</string>
+    <string name="pref_cache_help">设置越高，滚动时已准备好的内容越多。“自动”会按此设备调整。</string>
     <string name="pref_disable_front_buffering">禁用前缓冲绘制</string>
     <string name="pref_front_buffering_help">前缓冲绘制可降低笔迹延迟。部分屏幕可能出现笔迹闪烁或跟笔延迟，遇到这些问题时可关闭此功能，使用常规画布绘制。</string>
     <string name="pref_code_highlighting">代码高亮</string>
@@ -400,8 +389,9 @@
     <string name="toggle_previous">切换上一个工具</string>
     <string name="pref_filename_template_help">YYYY YY MM DD HH mm ss 会展开为创建日期和时间。# 会变为序号以确保文件夹中的名称不重复。</string>
     <string name="pref_next_note_named">下一个笔记将命名为 %1$s</string>
-    <string name="pref_side_margin_px">"侧边距  %1$d px"</string>
-    <string name="pref_max_cache_px">"最大缓存分辨率  %1$d px"</string>
+    <string name="pref_side_margin_px">"页边距  %1$d px"</string>
+    <string name="pref_cache_memory_auto">"缓存内存  自动（%1$d MB）"</string>
+    <string name="pref_cache_memory_mb">"缓存内存  %1$d MB"</string>
     <string name="pref_toolbar_colours_n">"工具栏颜色  %1$d"</string>
 
     <!-- Home screen and explorer -->
@@ -483,7 +473,7 @@
     <string name="nothing_this_colour">没有项目使用此颜色。</string>
     <string name="recent_empty">还没有打开过任何内容。你打开的笔记和画布会显示在这里。</string>
     <string name="nothing_to_show">这里没有可显示的内容。</string>
-    <string name="no_pdf_notes_here">这里没有 PDF 笔记。</string>
+    <string name="no_pdf_notes_here">这里没有 PDF。</string>
     <string name="include_subfolders">包括子文件夹</string>
     <string name="opened_on_device">在此设备上打开过</string>
     <string name="clear">清除</string>
@@ -651,16 +641,16 @@
     <string name="bookmarks">书签</string>
     <string name="selected">已选择</string>
     <string name="page_options">页面选项</string>
-    <string name="back_share_as">"‹  分享为"</string>
+    <string name="back_share_as">分享为</string>
     <string name="image_png">图片（PNG）</string>
-    <string name="back_save_as">"‹  另存为"</string>
+    <string name="back_save_as">另存为</string>
     <string name="add_page">添加页面</string>
     <string name="insert_pdf">插入 PDF</string>
     <string name="erase_page">清空页面</string>
     <string name="erase">清空</string>
     <string name="share_ellipsis">分享…</string>
     <string name="rotate_ellipsis">旋转…</string>
-    <string name="back_rotate">"‹  旋转"</string>
+    <string name="back_rotate">旋转</string>
     <string name="rotate_right">向右</string>
     <string name="rotate_left">向左</string>
     <string name="rotate_upside_down">上下颠倒</string>
@@ -676,7 +666,8 @@
     <string name="no_bookmarks">— 没有书签 —</string>
     <string name="add">添加</string>
     <string name="page_n">第 %1$d 页</string>
-    <string name="bookmark_entry">%1$s · 第 %2$d 页</string>
+    <string name="expand_entry">展开</string>
+    <string name="collapse_entry">收起</string>
 
     <!-- Selection and long-press menus -->
     <string name="bring_to_front">置于顶层</string>
@@ -777,7 +768,7 @@
     <!-- Colour picker -->
     <string name="swatches">色板</string>
     <string name="spectrum">光谱</string>
-    <string name="caption_recent">最近使用</string>
+    <string name="previous_colour">之前的颜色</string>
 
     <!-- Canvas and storage -->
     <string name="pull_to_add_page">拉动以添加页面</string>
@@ -803,7 +794,7 @@
     <string name="opened_ago">%1$s打开</string>
     <string name="kind_folders">文件夹</string>
     <string name="kind_notes">笔记</string>
-    <string name="kind_pdf_notes">PDF 笔记</string>
+    <string name="kind_pdf_notes">PDF</string>
     <string name="kind_canvases">画布</string>
     <string name="hue_black">黑色</string>
     <string name="hue_white">白色</string>
@@ -884,24 +875,18 @@
     <!-- Explorer -->
     <string name="sort_created">创建日期</string>
     <string name="select_all">全选</string>
-    <string name="close_view_options">关闭视图选项</string>
     <string name="opt_layout">布局</string>
-    <string name="opt_rows">行</string>
-    <string name="rows_comfortable">宽松</string>
-    <string name="rows_compact">紧凑</string>
+    <string name="opt_compact_rows">紧凑行</string>
     <string name="opt_tile_size">图块大小</string>
-    <string name="pinch_hint">也可以双指缩放网格来调整图块大小</string>
     <string name="opt_place_by">文件放置依据</string>
-    <string name="opt_thumbnail">缩略图</string>
-    <string name="thumb_top">页面顶部</string>
-    <string name="thumb_page">整页</string>
+    <string name="opt_whole_page_thumbs">整页缩略图</string>
     <string name="opt_show_on_tiles">图块上显示</string>
+    <string name="shown_of">%1$d/%2$d</string>
     <string name="show_page_count">页数</string>
     <string name="show_time">时间</string>
     <string name="colour_code">颜色标记</string>
     <string name="opt_group_by">分组方式</string>
     <string name="view_every_folder">在所有文件夹中使用此视图</string>
-    <string name="view_every_folder_hint">关闭时：每个文件夹记住自己的视图</string>
     <string name="sort_z_to_a">Z 到 A</string>
     <string name="sort_a_to_z">A 到 Z</string>
     <string name="largest_first">从大到小</string>
@@ -912,7 +897,7 @@
     <string name="modified">修改时间</string>
     <string name="created">创建时间</string>
     <string name="kind_note">笔记</string>
-    <string name="kind_pdf_note">PDF 笔记</string>
+    <string name="kind_pdf_note">PDF</string>
     <string name="kind_canvas">画布</string>
     <string name="more_for">“%1$s”的更多选项</string>
     <string name="pinned_to_sidebar">已固定到侧边栏</string>

@@ -23,12 +23,10 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -108,7 +106,7 @@ internal fun TrashPane(editor: Editor, sidebarOpen: Boolean, onShowSidebar: () -
                 Text(stringResource(R.string.trash), color = palette.text.toComposeColor(), fontWeight = FontWeight.Bold, fontSize = 20.sp, maxLines = 1, modifier = Modifier.weight(1f))
                 ExplorerSearchField(query, { query = it }, expandedWidth = searchRoom.coerceIn(40.dp, 300.dp))
                 Spacer(Modifier.width(12.dp))
-                val shape = MaterialTheme.shapes.extraLarge
+                val shape = MaterialTheme.shapes.medium
                 val enabled = !busy && !items.isNullOrEmpty()
                 Row(
                     Modifier.onSizeChanged { emptyWidth = with(density) { it.width.toDp() } }
@@ -195,12 +193,12 @@ internal fun TrashPane(editor: Editor, sidebarOpen: Boolean, onShowSidebar: () -
     }
 
     if (confirmEmpty && root != null) {
-        AlertDialog(
-            onDismissRequest = { confirmEmpty = false },
-            title = { Text(stringResource(R.string.empty_trash_confirm)) },
-            text = { Text(stringResource(R.string.empty_trash_body)) },
-            confirmButton = {
-                TextButton(onClick = {
+        SheetDialog(
+            title = stringResource(R.string.empty_trash_confirm),
+            onDismiss = { confirmEmpty = false },
+            text = stringResource(R.string.empty_trash_body),
+            foot = {
+                ConfirmButtons(stringResource(R.string.empty_trash), { confirmEmpty = false }, ButtonKind.DESTROY) {
                     confirmEmpty = false
                     busy = true
                     scope.launch {
@@ -208,27 +206,25 @@ internal fun TrashPane(editor: Editor, sidebarOpen: Boolean, onShowSidebar: () -
                         busy = false
                         refresh++
                     }
-                }) { Text(stringResource(R.string.empty_trash)) }
+                }
             },
-            dismissButton = { TextButton(onClick = { confirmEmpty = false }) { Text(stringResource(R.string.cancel)) } },
         )
     }
     confirmDelete?.let { item ->
         if (root == null) return@let
-        AlertDialog(
-            onDismissRequest = { confirmDelete = null },
-            title = { Text(stringResource(R.string.delete_permanently_confirm)) },
-            text = { Text(stringResource(R.string.delete_permanently_body, label(item))) },
-            confirmButton = {
-                TextButton(onClick = {
+        SheetDialog(
+            title = stringResource(R.string.delete_permanently_confirm),
+            onDismiss = { confirmDelete = null },
+            text = stringResource(R.string.delete_permanently_body, label(item)),
+            foot = {
+                ConfirmButtons(stringResource(R.string.delete), { confirmDelete = null }, ButtonKind.DESTROY) {
                     confirmDelete = null
                     scope.launch {
                         withContext(Dispatchers.IO) { editor.deleteTrash(root, item) }
                         refresh++
                     }
-                }) { Text(stringResource(R.string.delete)) }
+                }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 }
@@ -257,7 +253,7 @@ private fun TrashRow(
     val palette = LocalPalette.current
     val words = rememberExplorerWords()
     val e = item.entry
-    val kind = entryKind(e, editor.cachedMeta(e))
+    val kind = entryKind(e)
     val dim = palette.textDim.toComposeColor()
     val wasIn = item.path.lastOrNull() ?: rootName
     val deleted = formatWhen(words, item.deleted, now, "day", true, clock24, zone)
@@ -308,8 +304,8 @@ private fun TrashRow(
                     }
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(text = { Text(stringResource(R.string.restore)) }, onClick = { menu = false; onRestore() })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.delete_permanently)) }, onClick = { menu = false; onDelete() })
+                    MenuItem(stringResource(R.string.restore), XnotesIcons.restore, onClick = { menu = false; onRestore() })
+                    MenuItem(stringResource(R.string.delete_permanently), XnotesIcons.trash, danger = true, onClick = { menu = false; onDelete() })
                 }
             }
         }

@@ -47,6 +47,8 @@ private val CANVAS_TOOL_OF: Map<ToolbarItem, Tool> = mapOf(
 @Composable
 fun InfiniteToolbar(
     editor: InfiniteEditor,
+    fullscreen: Boolean,
+    onToggleFullscreen: () -> Unit,
     onOpenBackstage: () -> Unit,
     onInsertImage: () -> Unit = {},
     onClosePane: (() -> Unit)? = null,
@@ -70,10 +72,8 @@ fun InfiniteToolbar(
         Tool.LASSO to XnotesIcons.lasso,
         Tool.TAPE to XnotesIcons.tape,
     )
-    var stylesOpen by remember { mutableStateOf(false) }
     var eraserOpen by remember { mutableStateOf(false) }
     var shapeOpen by remember { mutableStateOf(false) }
-    var waypointsOpen by remember { mutableStateOf(false) }
     var penOpen by remember { mutableStateOf<Tool?>(null) }
     var selectOpen by remember { mutableStateOf(false) }
     var lassoOpen by remember { mutableStateOf(false) }
@@ -82,8 +82,16 @@ fun InfiniteToolbar(
     // opens it, so the five colours are both the ink and the way to change it.
     var switcherIndex by remember { mutableStateOf<Int?>(null) }
 
-    // Pinned outside the scrolling strip so closing a split pane is always one tap away.
-    ToolbarFrame(armed = editor.tool, trailing = onClosePane?.let { { ClosePaneButton(it) } }) {
+    // Pinned outside the scrolling strip, so closing a split pane is always one tap away.
+    ToolbarFrame(
+        armed = editor.tool,
+        trailing = {
+            onClosePane?.let {
+                ClosePaneButton(it)
+                BarEndGap()
+            }
+        },
+    ) {
         val sections = editor.toolbarLayout.visibleSections
         sections.forEachIndexed { index, section ->
             if (index > 0) Separator()
@@ -161,45 +169,13 @@ fun InfiniteToolbar(
                     ToolbarItem.REDO ->
                         ToolbarIcon(XnotesIcons.redo, stringResource(R.string.redo), enabled = editor.canRedo, shortcut = Keys.REDO) { editor.redo() }
 
-                    // Where the paged bar keeps its page, styles and view menus. Waypoints take the
-                    // place of pagination: on an unbounded canvas, a saved view is what a page
-                    // number was.
-                    ToolbarItem.STYLES -> Box {
-                        ToolbarIcon(XnotesIcons.sliders, stringResource(R.string.toolbar_styles), active = stylesOpen) { stylesOpen = true }
-                        if (stylesOpen) CanvasStylesPopup(editor) { stylesOpen = false }
-                    }
-                    ToolbarItem.WAYPOINTS -> Box {
-                        ToolbarIcon(XnotesIcons.bookmark, stringResource(R.string.toolbar_waypoints), active = waypointsOpen) { waypointsOpen = true }
-                        if (waypointsOpen) CanvasWaypointsPopup(editor) { waypointsOpen = false }
-                    }
-                    ToolbarItem.MINIMAP ->
-                        ToolbarIcon(XnotesIcons.map, stringResource(R.string.toolbar_minimap), active = editor.minimapVisible) {
-                            editor.toggleMinimap()
-                        }
-
-                    ToolbarItem.ZOOM -> {
-                        ToolbarIcon(XnotesIcons.zoomOut, stringResource(R.string.zoom_out), enabled = !editor.zoomLocked, shortcut = Keys.ZOOM_OUT) {
-                            editor.zoomBy(1.0 / InfiniteEditor.ZOOM_STEP)
-                        }
-                        Label("${editor.zoomPercent}%")
-                        ToolbarIcon(XnotesIcons.zoomIn, stringResource(R.string.zoom_in), enabled = !editor.zoomLocked, shortcut = Keys.ZOOM_IN) {
-                            editor.zoomBy(InfiniteEditor.ZOOM_STEP)
-                        }
-                    }
-                    ToolbarItem.FIT ->
-                        ToolbarIcon(XnotesIcons.fit, stringResource(R.string.fit_all), enabled = !editor.zoomLocked, shortcut = Keys.FIT_ALL) { editor.zoomToFit() }
-
-                    ToolbarItem.ZOOM_LOCK -> ToolbarIcon(
-                        if (editor.zoomLocked) XnotesIcons.lock else XnotesIcons.unlock,
-                        stringResource(if (editor.zoomLocked) R.string.unlock_zoom else R.string.lock_zoom),
-                        active = editor.zoomLocked,
-                    ) { editor.toggleZoomLock() }
-
                     // Everything else belongs to the paged bar; a canvas layout never holds one.
                     else -> Unit
                 }
             }
         }
+        if (sections.isNotEmpty()) Separator()
+        CanvasSettingsButton(editor, fullscreen, onToggleFullscreen)
 
         if (!LocalBar.current.vertical) editor.renderFailure?.let {
             Separator()
